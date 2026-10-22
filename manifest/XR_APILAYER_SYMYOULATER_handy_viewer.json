@@ -1,0 +1,11 @@
+{
+    "file_format_version": "1.0.0",
+    "api_layer": {
+        "name": "XR_APILAYER_SYMYOULATER_handy_viewer",
+        "library_path": ".\\HandyViewer3D.dll",
+        "api_version": "1.0",
+        "implementation_version": "1",
+        "description": "Handy Viewer 3D - passthrough windows for your real wheel, hands and Stream Deck",
+        "disable_environment": "DISABLE_HANDY_VIEWER_3D"
+    }
+}
