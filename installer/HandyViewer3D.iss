@@ -27,6 +27,7 @@ UninstallDisplayName=Handy Viewer 3D
 
 [Files]
 Source: "{#StageDir}\HandyViewer3D.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\HandyViewer3DCheck.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\XR_APILAYER_SYMYOULATER_handy_viewer.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\shapes\*"; DestDir: "{app}\shapes"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
@@ -41,3 +42,7 @@ Name: "{commonappdata}\Handy Viewer 3D"; Permissions: users-modify
 ; Implicit layer: value name is the manifest path, value 0 means enabled.
 Root: HKLM64; Subkey: "SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit"; ValueType: dword; \
   ValueName: "{app}\XR_APILAYER_SYMYOULATER_handy_viewer.json"; ValueData: 0; Flags: uninsdeletevalue
+
+[Icons]
+Name: "{autoprograms}\Handy Viewer 3D Check"; Filename: "{app}\HandyViewer3DCheck.exe"
+Name: "{autodesktop}\Handy Viewer 3D Check"; Filename: "{app}\HandyViewer3DCheck.exe"

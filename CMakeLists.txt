@@ -6,10 +6,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FetchContent)
 
-# OpenXR headers only (SOURCE_SUBDIR points nowhere so the loader is not built).
+# OpenXR SDK: headers for the layer, plus the loader for the Check tool.
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(DYNAMIC_LOADER OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(openxr
-    URL https://github.com/KhronosGroup/OpenXR-SDK/archive/refs/tags/release-1.1.65.tar.gz
-    SOURCE_SUBDIR do-not-build)
+    URL https://github.com/KhronosGroup/OpenXR-SDK/archive/refs/tags/release-1.1.65.tar.gz)
 FetchContent_Declare(nlohmann_json
     URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
     SOURCE_SUBDIR do-not-build)
@@ -36,7 +37,16 @@ if(MSVC)
     set_property(TARGET HandyViewer3D PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
+# Check tool: reports runtime, registered layers and whether the layer loads.
+add_executable(HandyViewer3DCheck WIN32 tools/check.cpp)
+target_link_libraries(HandyViewer3DCheck PRIVATE OpenXR::openxr_loader advapi32 user32)
+target_compile_definitions(HandyViewer3DCheck PRIVATE UNICODE _UNICODE)
+if(MSVC)
+    set_property(TARGET HandyViewer3DCheck PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    set_property(TARGET openxr_loader PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # Lay out the install folder exactly as the installer expects it.
-install(TARGETS HandyViewer3D RUNTIME DESTINATION .)
+install(TARGETS HandyViewer3D HandyViewer3DCheck RUNTIME DESTINATION .)
 install(FILES manifest/XR_APILAYER_SYMYOULATER_handy_viewer.json DESTINATION .)
 install(DIRECTORY shapes DESTINATION .)

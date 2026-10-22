@@ -30,7 +30,7 @@
 #include "mathutil.h"
 #include "steering.h"
 
-#define HV_VERSION "0.1.3"
+#define HV_VERSION "0.1.4"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_handy_viewer"
 
 namespace hv {
