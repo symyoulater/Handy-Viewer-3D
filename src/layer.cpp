@@ -30,7 +30,7 @@
 #include "mathutil.h"
 #include "steering.h"
 
-#define HV_VERSION "0.1.1"
+#define HV_VERSION "0.1.2"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_handy_viewer"
 
 namespace hv {
@@ -410,7 +410,8 @@ bool Upload(Window& w) {
 void MarkChanged() { g.saveDue = GetTickCount() + 1500; }
 
 void Highlight() {
-    g.highlightUntil = GetTickCount() + 4000;
+    // In edit mode the outline stays until edit mode ends; otherwise it shows for 4 seconds.
+    g.highlightUntil = InEditMode() ? 0xFFFFFFFF : GetTickCount() + 4000;
     bool wantWheel = g.selected == 0;
     if (g.wheel.highlighted != wantWheel) { g.wheel.highlighted = wantWheel; if (g.wheel.shape.valid()) Rasterise(g.wheel); }
     for (size_t i = 0; i < g.rects.size(); ++i) {
@@ -464,6 +465,14 @@ void HandleHotkeys(XrTime displayTime) {
     for (int i = 0; i < n; ++i) {
         Pose* p = SelectedPose();
         switch (actions[i]) {
+        case Action::EditModeOn:
+            Log("Edit mode on - adjusting %s", SelectedName());
+            Highlight();
+            break;
+        case Action::EditModeOff:
+            Log("Edit mode off");
+            g.highlightUntil = GetTickCount(); // outline clears on the next frame
+            break;
         case Action::ToggleAll:
             g.cfg.enabled = !g.cfg.enabled;
             Log("Windows %s", g.cfg.enabled ? "on" : "off");
@@ -648,6 +657,7 @@ void SetupSession(XrSession session, const XrSessionCreateInfo* info) {
     g.cfgStamp = ConfigFileStamp();
     g.structureDirty = true;
     StartSteeringReader(g.cfg.steering.deviceMatch);
+    StartHotkeys();
 }
 
 void TeardownSession() {
@@ -762,6 +772,7 @@ XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* inf
 
 XrResult XRAPI_CALL Hook_xrDestroyInstance(XrInstance instance) {
     if (g.session) { try { TeardownSession(); } catch (...) {} }
+    StopHotkeys();
     StopSteeringReader();
     XrResult r = next.DestroyInstance(instance);
     g.instance = XR_NULL_HANDLE;

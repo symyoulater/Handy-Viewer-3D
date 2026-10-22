@@ -1,65 +1,155 @@
 #include "hotkeys.h"
+#include "log.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+
+#include <atomic>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 namespace hv {
 
 namespace {
 
-struct Binding {
-    Action action;
-    int vk;
-    bool repeats;
-};
+std::atomic<bool> g_edit{false};
+std::atomic<DWORD> g_threadId{0};
+std::thread g_thread;
+std::mutex g_mutex;
+std::vector<Action> g_queue;
+bool g_fine = false;
+bool g_shift = false; // tracked here because swallowed keys don't update GetAsyncKeyState
+DWORD g_lastEditKey = 0;
 
-const Binding kBindings[] = {
-    {Action::ToggleAll, '1', false},
-    {Action::SelectNext, '2', false},
-    {Action::PlaceInFront, '3', false},
-    {Action::NextWheel, '4', false},
-    {Action::CentreSteering, '5', false},
-    {Action::InvertSteering, '6', false},
-    {Action::MoveLeft, 'A', true},
-    {Action::MoveRight, 'D', true},
-    {Action::MoveUp, 'W', true},
-    {Action::MoveDown, 'S', true},
-    {Action::MoveAway, 'R', true},
-    {Action::MoveCloser, 'F', true},
-    {Action::TiltUp, 'T', true},
-    {Action::TiltDown, 'G', true},
-    {Action::TurnLeft, 'Q', true},
-    {Action::TurnRight, 'E', true},
-    {Action::RollLeft, 'Z', true},
-    {Action::RollRight, 'C', true},
-    {Action::Bigger, VK_OEM_PLUS, true},
-    {Action::Smaller, VK_OEM_MINUS, true},
-};
-
-constexpr int kCount = sizeof(kBindings) / sizeof(kBindings[0]);
-bool g_down[kCount] = {};
-DWORD g_nextRepeat[kCount] = {};
+void Push(Action a, bool fine) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_queue.size() < 64) g_queue.push_back(a);
+    if (fine) g_fine = true;
+}
 
 bool Held(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
 
+Action EditAction(DWORD vk) {
+    switch (vk) {
+    case VK_TAB: return Action::SelectNext;
+    case 'P': return Action::PlaceInFront;
+    case 'W': return Action::NextWheel;
+    case 'X': return Action::CentreSteering;
+    case 'I': return Action::InvertSteering;
+    case VK_LEFT: return Action::MoveLeft;
+    case VK_RIGHT: return Action::MoveRight;
+    case VK_UP: return Action::MoveUp;
+    case VK_DOWN: return Action::MoveDown;
+    case 'R': return Action::MoveAway;
+    case 'F': return Action::MoveCloser;
+    case 'T': return Action::TiltUp;
+    case 'G': return Action::TiltDown;
+    case 'Q': return Action::TurnLeft;
+    case 'E': return Action::TurnRight;
+    case 'Z': return Action::RollLeft;
+    case 'C': return Action::RollRight;
+    case VK_OEM_PLUS: case VK_ADD: return Action::Bigger;
+    case VK_OEM_MINUS: case VK_SUBTRACT: return Action::Smaller;
+    default: return Action::None;
+    }
+}
+
+LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
+    if (code != HC_ACTION) return CallNextHookEx(nullptr, code, wParam, lParam);
+    const auto* k = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
+    bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
+    DWORD vk = k->vkCode;
+
+    if (vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT) g_shift = down;
+
+    if (g_edit) {
+        // Edit mode: catch everything except the Windows keys, so nothing reaches the game.
+        if (vk == VK_LWIN || vk == VK_RWIN) return CallNextHookEx(nullptr, code, wParam, lParam);
+        if (down) {
+            g_lastEditKey = GetTickCount();
+            bool ctrlAlt = Held(VK_CONTROL) && Held(VK_MENU);
+            if (vk == VK_ESCAPE || vk == VK_RETURN || (ctrlAlt && vk == 'H')) {
+                g_edit = false;
+                Push(Action::EditModeOff, false);
+            } else if (ctrlAlt && vk == 'V') {
+                Push(Action::ToggleAll, false);
+            } else {
+                Action a = EditAction(vk);
+                if (a != Action::None) Push(a, g_shift);
+            }
+        }
+        return 1;
+    }
+
+    // Normal driving: only our two shortcuts are caught.
+    if (Held(VK_CONTROL) && Held(VK_MENU) && (vk == 'H' || vk == 'V')) {
+        if (down) {
+            if (vk == 'H') {
+                g_edit = true;
+                g_lastEditKey = GetTickCount();
+                Push(Action::EditModeOn, false);
+            } else {
+                Push(Action::ToggleAll, false);
+            }
+        }
+        return 1;
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+void HookThread() {
+    g_threadId = GetCurrentThreadId();
+    HMODULE mod = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&KeyboardProc), &mod);
+    HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardProc, mod, 0);
+    if (!hook) {
+        Log("Keyboard hook could not be installed (error %lu) - hotkeys won't work", GetLastError());
+        return;
+    }
+    Log("Keyboard ready: Ctrl+Alt+H for edit mode, Ctrl+Alt+V to show/hide windows");
+    MSG msg;
+    // A timer wakes the loop so edit mode can time out if forgotten.
+    SetTimer(nullptr, 0, 1000, nullptr);
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (g_edit && GetTickCount() - g_lastEditKey > 120000) {
+            g_edit = false;
+            Push(Action::EditModeOff, false);
+        }
+        DispatchMessageW(&msg);
+    }
+    UnhookWindowsHookEx(hook);
+}
+
 } // namespace
 
+void StartHotkeys() {
+    if (g_thread.joinable()) return;
+    g_thread = std::thread(HookThread);
+}
+
+void StopHotkeys() {
+    if (!g_thread.joinable()) return;
+    for (int i = 0; i < 50 && !g_threadId; ++i) Sleep(10);
+    if (g_threadId) PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
+    g_thread.join();
+    g_threadId = 0;
+    g_edit = false;
+}
+
+bool InEditMode() { return g_edit; }
+
 int PollHotkeys(Action* out, int maxOut, bool& fine) {
+    std::lock_guard<std::mutex> lock(g_mutex);
     int n = 0;
-    bool mods = Held(VK_CONTROL) && Held(VK_MENU);
-    fine = Held(VK_SHIFT);
-    DWORD now = GetTickCount();
-    for (int i = 0; i < kCount; ++i) {
-        bool down = mods && Held(kBindings[i].vk);
-        if (down && !g_down[i]) {
-            if (n < maxOut) out[n++] = kBindings[i].action;
-            g_nextRepeat[i] = now + 400;
-        } else if (down && kBindings[i].repeats && (LONG)(now - g_nextRepeat[i]) >= 0) {
-            if (n < maxOut) out[n++] = kBindings[i].action;
-            g_nextRepeat[i] = now + 80;
-        }
-        g_down[i] = down;
+    for (Action a : g_queue) {
+        if (n >= maxOut) break;
+        out[n++] = a;
     }
+    g_queue.erase(g_queue.begin(), g_queue.begin() + n);
+    fine = g_fine;
+    if (g_queue.empty()) g_fine = false;
     return n;
 }
 

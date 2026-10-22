@@ -1,28 +1,37 @@
-// Handy Viewer 3D - global hotkeys polled every frame (work while the sim has focus).
-// All use Ctrl+Alt plus main-block keys, so they work on compact keyboards with no
-// numpad or F-keys (e.g. Logitech K400) and can be put on Stream Deck buttons.
+// Handy Viewer 3D - keyboard control with an "edit mode".
+//
+// Ctrl+Alt+H switches edit mode on and off. While edit mode is on, every key press is
+// caught by Handy Viewer 3D and never reaches the game, so plain keys (arrows, letters)
+// can be used for adjusting windows without clashing with the sim's own bindings.
+// Outside edit mode only Ctrl+Alt+H and Ctrl+Alt+V are caught; everything else goes to the game.
 #pragma once
 
 namespace hv {
 
 enum class Action {
     None,
-    ToggleAll,       // Ctrl+Alt+1
-    SelectNext,      // Ctrl+Alt+2
-    PlaceInFront,    // Ctrl+Alt+3
-    NextWheel,       // Ctrl+Alt+4
-    CentreSteering,  // Ctrl+Alt+5
-    InvertSteering,  // Ctrl+Alt+6
-    MoveLeft, MoveRight, MoveUp, MoveDown, MoveAway, MoveCloser, // A D W S R F
-    TiltUp, TiltDown,      // T G
-    TurnLeft, TurnRight,   // Q E
-    RollLeft, RollRight,   // Z C
-    Bigger, Smaller,       // = -
-    Count
+    EditModeOn,
+    EditModeOff,
+    ToggleAll,       // Ctrl+Alt+V (any time)
+    SelectNext,      // Tab
+    PlaceInFront,    // P
+    NextWheel,       // W
+    CentreSteering,  // X
+    InvertSteering,  // I
+    MoveLeft, MoveRight, MoveUp, MoveDown, // arrow keys
+    MoveAway, MoveCloser,                 // R / F
+    TiltUp, TiltDown,                     // T / G
+    TurnLeft, TurnRight,                  // Q / E
+    RollLeft, RollRight,                  // Z / C
+    Bigger, Smaller,                      // = / -
 };
 
-// Returns the actions triggered this frame (with key repeat while held).
-// 'fine' is true when Shift is also held, for small steps.
+void StartHotkeys();
+void StopHotkeys();
+
+bool InEditMode();
+
+// Actions queued since the last call. 'fine' is set if Shift was held for any of them.
 int PollHotkeys(Action* out, int maxOut, bool& fine);
 
 } // namespace hv

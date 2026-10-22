@@ -31,6 +31,10 @@ Source: "{#StageDir}\XR_APILAYER_SYMYOULATER_handy_viewer.json"; DestDir: "{app}
 Source: "{#StageDir}\shapes\*"; DestDir: "{app}\shapes"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
+[Dirs]
+; Created now so you can see it exists; the log appears here once a game has loaded the layer.
+Name: "{userdocs}\Handy Viewer 3D"
+
 [Registry]
 ; Implicit layer: value name is the manifest path, value 0 means enabled.
 Root: HKLM64; Subkey: "SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit"; ValueType: dword; \

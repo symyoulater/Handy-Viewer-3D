@@ -4,7 +4,7 @@ See your real wheel, hands and Stream Deck while driving in VR.
 
 Handy Viewer 3D adds flat "windows" to any OpenXR game, filled with Virtual Desktop's chroma-key colour (magenta). Virtual Desktop replaces that colour with the Quest 3's passthrough cameras, so your real kit shows through exactly where it sits. The wheel window turns with your Simucube, so it hugs the rim at any steering angle.
 
-**Version 0.1.1** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
+**Version 0.1.2** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
 
 ---
 
@@ -33,40 +33,46 @@ That's it — the next OpenXR game you start will load it.
 
 1. Start **Le Mans Ultimate** or **Assetto Corsa EVO** in VR and get into a car.
 2. After a few seconds a window appears straight ahead of you, outlined in yellow, showing your real surroundings. That confirms it's working.
-3. Fit the rim you're using (the **Conspit 300GT** is selected to begin with; **Ctrl+Alt+4** swaps to the **310 APEX**).
-4. Hold the wheel straight, sit in your driving position, look at the centre of the wheel and press **Ctrl+Alt+3**. The wheel window jumps to where you're looking, 60 cm in front of you.
-5. Nudge it with the keys below until the real rim fills it.
-6. With the wheel dead straight, press **Ctrl+Alt+5** to set the centre.
-7. Turn the wheel. If the window turns the wrong way, press **Ctrl+Alt+6**.
-8. Press **Ctrl+Alt+2** to select the **Stream Deck** window, look at the Stream Deck, press **Ctrl+Alt+3**, then nudge and resize it the same way.
+3. Press **Ctrl+Alt+H** to switch on **edit mode**. While it's on, your key presses go to Handy Viewer 3D only, never to the game, so nothing clashes with LMU's own keys.
+4. Fit the rim you're using (the **Conspit 300GT** is selected to begin with; **W** swaps to the **310 APEX**).
+5. Hold the wheel straight, sit in your driving position, look at the centre of the wheel and press **P**. The wheel window jumps to where you're looking, 60 cm in front of you.
+6. Nudge it with the keys below until the real rim fills it.
+7. With the wheel dead straight, press **X** to set the centre.
+8. Turn the wheel. If the window turns the wrong way, press **I**.
+9. Press **Tab** to select the **Stream Deck** window, look at the Stream Deck, press **P**, then nudge and resize it the same way.
+10. Press **Esc** (or **Enter**, or **Ctrl+Alt+H** again) to leave edit mode and drive.
 
-Everything saves automatically and stays in place next time.
+Everything saves automatically and stays in place next time. Edit mode also switches itself off after 2 minutes without a key press.
 
 ---
 
-## Hotkeys
+## Keys
 
-All hotkeys work while the game has focus, on any keyboard (no numpad or F-keys needed). Hold **Ctrl+Alt**, then:
+While driving, only two shortcuts are used — everything else goes to the game:
 
 | Key | Does |
 |---|---|
-| 1 | All windows on / off |
-| 2 | Select next window (wheel → Stream Deck) |
-| 3 | Place the selected window where you're looking |
-| 4 | Swap wheel: Conspit 300GT ↔ Conspit 310 APEX |
-| 5 | Set steering centre (wheel straight) |
-| 6 | Flip steering direction |
-| A / D | Move left / right |
-| W / S | Move up / down |
+| Ctrl+Alt+H | Edit mode on / off |
+| Ctrl+Alt+V | All windows on / off |
+
+In **edit mode** (selected window has a yellow outline):
+
+| Key | Does |
+|---|---|
+| Tab | Select next window (wheel → Stream Deck) |
+| P | Place the selected window where you're looking |
+| W | Swap wheel: Conspit 300GT ↔ Conspit 310 APEX |
+| X | Set steering centre (wheel straight) |
+| I | Flip steering direction |
+| Arrow keys | Move left / right / up / down |
 | R / F | Move away / closer |
 | T / G | Tilt top away / towards you |
 | Q / E | Turn left / right |
 | Z / C | Roll left / right |
 | = / − | Stream Deck window bigger / smaller |
+| Esc or Enter | Leave edit mode |
 
 Hold **Shift** as well for fine steps (1 mm or 0.25°).
-
-The selected window shows a yellow outline for a few seconds after each change.
 
 ---
 
