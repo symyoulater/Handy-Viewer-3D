@@ -115,6 +115,7 @@ namespace ThinPlaceVR
                 ["width"] = ConfigStore.Num(w, "width_mm", 130),
                 ["height"] = ConfigStore.Num(w, "height_mm", 95),
                 ["enabled"] = ConfigStore.Bool(w, "enabled", true),
+                ["onlyWhileAdjusting"] = ConfigStore.Bool(w, "only_while_adjusting", false),
             }).ToList();
             return new Dictionary<string, object>
             {
@@ -328,6 +329,7 @@ namespace ThinPlaceVR
                         if (a.ContainsKey("width")) w["width_mm"] = Clamp(a["width"], 20, 800);
                         if (a.ContainsKey("height")) w["height_mm"] = Clamp(a["height"], 20, 800);
                         if (a.ContainsKey("enabled")) w["enabled"] = Convert.ToBoolean(a["enabled"]);
+                        if (a.ContainsKey("onlyWhileAdjusting")) w["only_while_adjusting"] = Convert.ToBoolean(a["onlyWhileAdjusting"]);
                     });
                     return null;
                 }
@@ -344,6 +346,7 @@ namespace ThinPlaceVR
                             ["width_mm"] = Clamp(a.TryGetValue("width", out object w) ? w : 200, 20, 800),
                             ["height_mm"] = Clamp(a.TryGetValue("height", out object h) ? h : 120, 20, 800),
                             ["enabled"] = true,
+                            ["only_while_adjusting"] = ConfigStore.Bool(a, "onlyWhileAdjusting", false),
                             ["pose"] = new Dictionary<string, object>
                             {
                                 ["position_m"] = new ArrayList { 0.0, 0.9, -0.5 },

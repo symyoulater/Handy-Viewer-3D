@@ -115,6 +115,7 @@ struct State {
     DWORD highlightUntil = 0;
     bool loggedFirstFrame = false;
     int framesSinceStart = 0;
+    DWORD lastAdjustTick = 0; // last time a window was adjusted from a hotkey or the app
     bool loggedError = false;
 
     // Live link to the desktop app
@@ -482,8 +483,15 @@ bool PlaceSelectedInFront(XrTime displayTime) {
     return true;
 }
 
+// True while someone is adjusting windows: keyboard edit mode, or a hotkey / app button in the
+// last 20 seconds. "Only while adjusting" windows (like a keyboard window) show during this.
+bool Adjusting() {
+    return InEditMode() || (g.lastAdjustTick && GetTickCount() - g.lastAdjustTick < 20000);
+}
+
 // One adjustment, from a hotkey or from the desktop app.
 void DoAction(Action action, bool fine, XrTime displayTime) {
+    g.lastAdjustTick = GetTickCount();
     float step = (fine ? 1.0f : g.cfg.nudgeMm) / 1000.0f;
     float deg = fine ? 0.25f : g.cfg.nudgeDeg;
     {
@@ -655,6 +663,7 @@ void ProcessLink(XrTime displayTime) {
     bool fine = l->cmdFine != 0;
     if (target >= 0 && target <= (int)g.rects.size()) g.selected = target;
     if (action == Action::Select) {
+        g.lastAdjustTick = GetTickCount();
         Log("App selected %s", SelectedName());
         Highlight();
         return;
@@ -879,7 +888,7 @@ XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* inf
             }
             for (size_t i = 0; i < g.rects.size() && i < g.cfg.windows.size() && nq < 16; ++i) {
                 if (!g.cfg.windows[i].enabled) continue;
-                if (g.cfg.windows[i].onlyWhileAdjusting && !InEditMode() && GetTickCount() >= g.highlightUntil) continue;
+                if (g.cfg.windows[i].onlyWhileAdjusting && !Adjusting()) continue;
                 Window& w = g.rects[i];
                 if (w.needsUpload && !Upload(w)) continue;
                 quads[nq++] = MakeQuad(w, ToXrPose(g.cfg.windows[i].pose, 0.0f));

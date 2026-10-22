@@ -135,7 +135,7 @@
           <div class="item">
             <div class="ic"><svg width="24" height="18" viewBox="0 0 24 18" aria-hidden="true"><rect x="1" y="1" width="22" height="16" rx="3" fill="none" stroke="var(--accent)" stroke-width="1.6"/></svg></div>
             <div class="body"><span style="font-weight:500">${esc(x.name)}</span><span class="muted">${Math.round(x.width)} × ${Math.round(x.height)} mm</span></div>
-            <span class="muted">${x.enabled ? 'Shown' : 'Hidden'}</span>
+            <span class="muted">${!x.enabled ? 'Hidden' : x.onlyWhileAdjusting ? 'While adjusting' : 'Shown'}</span>
           </div>`).join('')}
           <button class="btn dashed" style="align-self:flex-start;margin-top:auto" data-act="addWindow">+ Add a window</button>`}
         </section>
@@ -161,7 +161,8 @@
     const title = isWheel ? 'Wheel' : win.name;
     const tabs = [`<button class="tab ${isWheel ? 'on' : ''}" data-act="tab" data-i="0">Wheel</button>`]
       .concat(c.windows.map((x, i) => `<button class="tab ${S.tab === i + 1 ? 'on' : ''}" data-act="tab" data-i="${i + 1}">${esc(x.name)}</button>`))
-      .concat(['<button class="tab" data-act="addWindow" aria-label="Add a window">+</button>']).join('');
+      .concat([(c.windows.some((x) => /keyboard/i.test(x.name)) ? '' : '<button class="tab" data-act="addKeyboard">+ Keyboard</button>'),
+        '<button class="tab" data-act="addWindow" aria-label="Add a window">+</button>']).join('');
 
     const preview = isWheel
       ? `${rimSvg(w && w.shape, { w: 480, h: 340, fill: 0.55, stroke: 1, margin: c.margin, id: 'rimrot' })}
@@ -181,6 +182,7 @@
         <div class="field"><label for="ww">Width (mm)</label><input id="ww" class="num-in" type="number" min="20" max="800" value="${Math.round(win.width)}" data-win="width"></div>
         <div class="field"><label for="wh">Height (mm)</label><input id="wh" class="num-in" type="number" min="20" max="800" value="${Math.round(win.height)}" data-win="height"></div>
         <div class="field"><span>Show in VR</span>${sw('wen', win.enabled, '', null, 'data-win="enabled"')}</div>
+        <div class="field"><div class="lbl"><span>Only while adjusting</span><span class="muted">Appears in edit mode (Ctrl+Alt+H) or for 20 s after using these buttons</span></div>${sw('wadj', win.onlyWhileAdjusting, '', null, 'data-win="onlyWhileAdjusting"')}</div>
         <button class="btn danger" data-act="removeWindow">Remove this window</button>`;
 
     return `
@@ -383,7 +385,7 @@
     const c = cfg();
     return JSON.stringify([S.page, S.tab, S.fine, S.state && S.state.layerActive, S.state && S.state.activeRuntime,
       c && [c.activeWheel, c.wheelPlaced, c.invert, c.enabled, c.keyColour, Math.round(c.margin),
-        c.wheels.map((w) => [w.id, w.scale]), c.windows.map((w) => [w.name, w.width, w.height, w.enabled])],
+        c.wheels.map((w) => [w.id, w.scale]), c.windows.map((w) => [w.name, w.width, w.height, w.enabled, w.onlyWhileAdjusting])],
       S.state && (S.state.games || []).map((g) => g.exe + g.lastUsed)]);
   }
 
@@ -472,6 +474,15 @@
         await send('addWindow', { name: 'Window ' + (c.windows.length + 1), width: 200, height: 120 });
         S.page = 'windows';
         S.tab = c.windows.length + 1;
+        break;
+      }
+      case 'addKeyboard': {
+        const c = cfg();
+        if (!c) return;
+        await send('addWindow', { name: 'Keyboard', width: 300, height: 120, onlyWhileAdjusting: true });
+        S.page = 'windows';
+        S.tab = c.windows.length + 1;
+        toast('Keyboard window added. With a game running, look at your keyboard and press Place.');
         break;
       }
       case 'removeWindow': {
