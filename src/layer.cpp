@@ -235,18 +235,18 @@ void Rasterise(Window& w) {
     //    for the hand margin and the selection outline.
     std::vector<float> dist(n, 0.0f);
     if (margin > 0 || w.highlighted) {
-        const int far = 1 << 14;
+        const int kFar = 1 << 14;
         std::vector<int16_t> dx(n), dy(n);
-        for (size_t i = 0; i < n; ++i) { dx[i] = inside[i] ? 0 : far; dy[i] = inside[i] ? 0 : far; }
+        for (size_t i = 0; i < n; ++i) { dx[i] = inside[i] ? 0 : kFar; dy[i] = inside[i] ? 0 : kFar; }
         auto len2 = [](int a, int b) { return a * a + b * b; };
         auto relax = [&](int x, int y, int ox, int oy) {
             int nx = x + ox, ny = y + oy;
             if (nx < 0 || ny < 0 || nx >= texW || ny >= texH) return;
             size_t i = (size_t)y * texW + x, j = (size_t)ny * texW + nx;
-            int vx = dx[j] == far ? far : dx[j] - ox;
-            int vy = dy[j] == far ? far : dy[j] - oy;
-            if (vx == far || vy == far) return;
-            if (len2(vx, vy) < len2(dx[i] == far ? far : dx[i], dy[i] == far ? far : dy[i])) { dx[i] = (int16_t)vx; dy[i] = (int16_t)vy; }
+            int vx = dx[j] == kFar ? kFar : dx[j] - ox;
+            int vy = dy[j] == kFar ? kFar : dy[j] - oy;
+            if (vx == kFar || vy == kFar) return;
+            if (len2(vx, vy) < len2(dx[i] == kFar ? kFar : dx[i], dy[i] == kFar ? kFar : dy[i])) { dx[i] = (int16_t)vx; dy[i] = (int16_t)vy; }
         };
         for (int y = 0; y < texH; ++y) {
             for (int x = 0; x < texW; ++x) { relax(x, y, -1, 0); relax(x, y, -1, -1); relax(x, y, 0, -1); relax(x, y, 1, -1); }
@@ -258,7 +258,7 @@ void Rasterise(Window& w) {
         }
         for (size_t i = 0; i < n; ++i) {
             if (inside[i]) continue;
-            if (dx[i] == far || dy[i] == far) { dist[i] = 1e9f; continue; }
+            if (dx[i] == kFar || dy[i] == kFar) { dist[i] = 1e9f; continue; }
             float ex = dx[i] * mmPerPxX, ey = dy[i] * mmPerPxY;
             dist[i] = std::sqrt(ex * ex + ey * ey);
         }
