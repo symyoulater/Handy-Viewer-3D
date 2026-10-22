@@ -80,7 +80,7 @@ namespace ThinPlaceVR
         // =====================================================================================
         private void BuildUi()
         {
-            var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(18, 14, 18, 14) };
+            var scroll = new StillPanel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(18, 14, 18, 14) };
             Controls.Add(scroll);
 
             var stack = new FlowLayoutPanel
@@ -438,6 +438,12 @@ namespace ThinPlaceVR
             catch { }
         }
 
+        // A scrolling panel that doesn't jump when you click a control inside it.
+        private sealed class StillPanel : System.Windows.Forms.Panel
+        {
+            protected override Point ScrollToControl(Control activeControl) => DisplayRectangle.Location;
+        }
+
         private sealed class RimItem
         {
             public readonly string Id, Name;
@@ -531,8 +537,9 @@ namespace ThinPlaceVR
             }
             catch (Exception ex)
             {
-                _updateText.Text = quiet ? "" : ex.Message;
+                _updateText.Text = quiet ? "" : "Couldn't check for updates.";
                 _updateText.ForeColor = Warn;
+                if (!quiet) MessageBox.Show(this, ex.Message, "Check for updates", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             finally
             {
@@ -558,8 +565,9 @@ namespace ThinPlaceVR
             }
             catch (Exception ex)
             {
-                _updateText.Text = "Update failed: " + ex.Message;
+                _updateText.Text = "Update didn't install.";
                 _updateText.ForeColor = Warn;
+                MessageBox.Show(this, "The update didn't install: " + ex.Message, "Update", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 _updateBtn.Enabled = true;
                 _updateProgress.Visible = false;
             }

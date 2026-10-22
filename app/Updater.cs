@@ -19,6 +19,18 @@ namespace ThinPlaceVR
     // Looks for new versions on the repo's GitHub Releases page and installs them.
     internal static class Updater
     {
+        // Every step is written to C:\ProgramData\Thin Place VR\app.log so a failed update can be diagnosed.
+        public static void Log(string msg)
+        {
+            try
+            {
+                Directory.CreateDirectory(Paths.LogDir);
+                File.AppendAllText(Path.Combine(Paths.LogDir, "app.log"),
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + msg + Environment.NewLine);
+            }
+            catch { }
+        }
+
         private const string LatestUrl = "https://api.github.com/repos/symyoulater/Thin-Place-VR/releases/latest";
 
         private static WebClient NewClient()
@@ -33,6 +45,7 @@ namespace ThinPlaceVR
         public static async Task<UpdateInfo> GetLatestAsync()
         {
             string text;
+            Log("Checking for updates (this is " + Paths.AppVersion + ")");
             try
             {
                 using (var wc = NewClient())
@@ -40,11 +53,13 @@ namespace ThinPlaceVR
             }
             catch (WebException ex) when ((ex.Response as HttpWebResponse)?.StatusCode == HttpStatusCode.NotFound)
             {
+                Log("Update check: 404 " + ex.Message);
                 throw new Exception("The update page couldn't be found. The GitHub repo may still be private.");
             }
-            catch (WebException)
+            catch (WebException ex)
             {
-                throw new Exception("Couldn't reach GitHub. Check the PC is online.");
+                Log("Update check failed: " + ex);
+                throw new Exception("Couldn't reach GitHub (" + ex.Message + ")");
             }
 
             var json = new JavaScriptSerializer().DeserializeObject(text) as Dictionary<string, object>;
@@ -70,6 +85,7 @@ namespace ThinPlaceVR
                 }
             }
             if (info.DownloadUrl == null) throw new Exception("The latest release has no installer attached yet.");
+            Log("Latest is " + info.Version + " at " + info.DownloadUrl);
             return info;
         }
 
@@ -79,20 +95,43 @@ namespace ThinPlaceVR
         public static async Task DownloadAndRunAsync(UpdateInfo info, IProgress<int> progress)
         {
             string target = Path.Combine(Path.GetTempPath(), info.FileName);
-            using (var wc = NewClient())
+            Log("Downloading to " + target);
+            try
             {
-                wc.Headers[HttpRequestHeader.Accept] = "application/octet-stream";
-                wc.DownloadProgressChanged += (s, e) => progress?.Report(e.ProgressPercentage);
-                await wc.DownloadFileTaskAsync(new Uri(info.DownloadUrl), target);
+                using (var wc = NewClient())
+                {
+                    wc.Headers[HttpRequestHeader.Accept] = "application/octet-stream";
+                    wc.DownloadProgressChanged += (s, e) => progress?.Report(e.ProgressPercentage);
+                    await wc.DownloadFileTaskAsync(new Uri(info.DownloadUrl), target);
+                }
             }
+            catch (Exception ex)
+            {
+                Log("Download failed: " + ex);
+                throw new Exception("the download didn't finish (" + ex.Message + ")");
+            }
+            Log("Downloaded " + new FileInfo(target).Length + " bytes; starting installer");
 
             // The installer closes this app, updates everything, then opens the app again.
-            Process.Start(new ProcessStartInfo
+            try
             {
-                FileName = target,
-                Arguments = "/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS",
-                UseShellExecute = true,
-            });
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = target,
+                    Arguments = "/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS",
+                    UseShellExecute = true,
+                });
+            }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            {
+                Log("Installer cancelled at the Windows permission prompt");
+                throw new Exception("Windows asked for permission and it was declined. Click Install again and choose Yes.");
+            }
+            catch (Exception ex)
+            {
+                Log("Installer failed to start: " + ex);
+                throw new Exception("the installer couldn't start (" + ex.Message + ")");
+            }
         }
     }
 }

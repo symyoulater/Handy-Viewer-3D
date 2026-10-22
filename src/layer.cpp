@@ -30,7 +30,7 @@
 #include "mathutil.h"
 #include "steering.h"
 
-#define HV_VERSION "0.3.1"
+#define HV_VERSION "0.3.2"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
