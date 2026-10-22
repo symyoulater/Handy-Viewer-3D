@@ -1,5 +1,5 @@
 // Handy Viewer 3D - simple file logger.
-// Writes to %LOCALAPPDATA%\HandyViewer3D\layer.log so problems can be diagnosed
+// Writes to Documents\Handy Viewer 3D\layer.log so problems can be diagnosed
 // without a debugger attached to the game.
 #pragma once
 

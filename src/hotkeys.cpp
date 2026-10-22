@@ -14,26 +14,26 @@ struct Binding {
 };
 
 const Binding kBindings[] = {
-    {Action::ToggleAll, VK_F1, false},
-    {Action::SelectNext, VK_F2, false},
-    {Action::PlaceInFront, VK_F3, false},
-    {Action::NextWheel, VK_F4, false},
-    {Action::CentreSteering, VK_F5, false},
-    {Action::InvertSteering, VK_F6, false},
-    {Action::MoveLeft, VK_NUMPAD4, true},
-    {Action::MoveRight, VK_NUMPAD6, true},
-    {Action::MoveUp, VK_NUMPAD8, true},
-    {Action::MoveDown, VK_NUMPAD2, true},
-    {Action::MoveAway, VK_NUMPAD9, true},
-    {Action::MoveCloser, VK_NUMPAD3, true},
-    {Action::TiltUp, VK_NUMPAD7, true},
-    {Action::TiltDown, VK_NUMPAD1, true},
-    {Action::TurnLeft, VK_DIVIDE, true},
-    {Action::TurnRight, VK_MULTIPLY, true},
-    {Action::RollLeft, VK_PRIOR, true},
-    {Action::RollRight, VK_NEXT, true},
-    {Action::Bigger, VK_ADD, true},
-    {Action::Smaller, VK_SUBTRACT, true},
+    {Action::ToggleAll, '1', false},
+    {Action::SelectNext, '2', false},
+    {Action::PlaceInFront, '3', false},
+    {Action::NextWheel, '4', false},
+    {Action::CentreSteering, '5', false},
+    {Action::InvertSteering, '6', false},
+    {Action::MoveLeft, 'A', true},
+    {Action::MoveRight, 'D', true},
+    {Action::MoveUp, 'W', true},
+    {Action::MoveDown, 'S', true},
+    {Action::MoveAway, 'R', true},
+    {Action::MoveCloser, 'F', true},
+    {Action::TiltUp, 'T', true},
+    {Action::TiltDown, 'G', true},
+    {Action::TurnLeft, 'Q', true},
+    {Action::TurnRight, 'E', true},
+    {Action::RollLeft, 'Z', true},
+    {Action::RollRight, 'C', true},
+    {Action::Bigger, VK_OEM_PLUS, true},
+    {Action::Smaller, VK_OEM_MINUS, true},
 };
 
 constexpr int kCount = sizeof(kBindings) / sizeof(kBindings[0]);
@@ -46,8 +46,8 @@ bool Held(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
 
 int PollHotkeys(Action* out, int maxOut, bool& fine) {
     int n = 0;
-    bool mods = Held(VK_CONTROL) && Held(VK_SHIFT);
-    fine = Held(VK_MENU);
+    bool mods = Held(VK_CONTROL) && Held(VK_MENU);
+    fine = Held(VK_SHIFT);
     DWORD now = GetTickCount();
     for (int i = 0; i < kCount; ++i) {
         bool down = mods && Held(kBindings[i].vk);

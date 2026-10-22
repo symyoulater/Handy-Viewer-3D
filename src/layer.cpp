@@ -30,7 +30,7 @@
 #include "mathutil.h"
 #include "steering.h"
 
-#define HV_VERSION "0.1.0"
+#define HV_VERSION "0.1.1"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_handy_viewer"
 
 namespace hv {
@@ -107,6 +107,7 @@ struct State {
     int selected = 0; // 0 = wheel, 1.. = rect windows
     DWORD highlightUntil = 0;
     bool loggedFirstFrame = false;
+    int framesSinceStart = 0;
     bool loggedError = false;
 } g;
 
@@ -434,6 +435,25 @@ void MoveLocal(Pose& p, float dx, float dy, float dz) {
     p.position[2] += d.z;
 }
 
+bool PlaceSelectedInFront(XrTime displayTime) {
+    Pose* p = SelectedPose();
+    if (!p) return false;
+    XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
+    if (XR_FAILED(next.LocateSpace(g.viewSpace, g.baseSpace, displayTime, &loc)) ||
+        !(loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) ||
+        !(loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT))
+        return false;
+    XrVector3f fwd = QuatRotate(loc.pose.orientation, {0, 0, -g.cfg.placeDistanceM});
+    p->position = {loc.pose.position.x + fwd.x, loc.pose.position.y + fwd.y, loc.pose.position.z + fwd.z};
+    ForwardYawPitch(loc.pose.orientation, p->yaw, p->pitch);
+    p->roll = 0;
+    if (g.selected == 0) g.cfg.wheelPlaced = true;
+    Log("Placed %s in front of you", SelectedName());
+    Highlight();
+    MarkChanged();
+    return true;
+}
+
 void HandleHotkeys(XrTime displayTime) {
     Action actions[8];
     bool fine = false;
@@ -485,22 +505,9 @@ void HandleHotkeys(XrTime displayTime) {
             Log("Steering direction %s", g.cfg.steering.invert ? "inverted" : "normal");
             MarkChanged();
             break;
-        case Action::PlaceInFront: {
-            if (!p) break;
-            XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
-            if (XR_SUCCEEDED(next.LocateSpace(g.viewSpace, g.baseSpace, displayTime, &loc)) &&
-                (loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) &&
-                (loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)) {
-                XrVector3f fwd = QuatRotate(loc.pose.orientation, {0, 0, -g.cfg.placeDistanceM});
-                p->position = {loc.pose.position.x + fwd.x, loc.pose.position.y + fwd.y, loc.pose.position.z + fwd.z};
-                ForwardYawPitch(loc.pose.orientation, p->yaw, p->pitch);
-                p->roll = 0;
-                Log("Placed %s in front of you", SelectedName());
-                Highlight();
-                MarkChanged();
-            }
+        case Action::PlaceInFront:
+            PlaceSelectedInFront(displayTime);
             break;
-        }
         default:
             if (!p) break;
             switch (actions[i]) {
@@ -693,6 +700,13 @@ XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* inf
         if (!g.loggedFirstFrame) {
             Log("First frame - adding windows");
             g.loggedFirstFrame = true;
+        }
+        // First ever run: put the wheel window in front of you after a few seconds,
+        // so there is something visible straight away to confirm it's working.
+        if (!g.cfg.wheelPlaced && ++g.framesSinceStart > 300) {
+            g.selected = 0;
+            if (PlaceSelectedInFront(info->displayTime)) Log("First run - wheel window placed automatically");
+            else g.framesSinceStart = 0;
         }
         HandleHotkeys(info->displayTime);
         CheckConfig();

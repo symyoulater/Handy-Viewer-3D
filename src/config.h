@@ -1,4 +1,4 @@
-// Handy Viewer 3D - settings stored in %LOCALAPPDATA%\HandyViewer3D\config.json
+// Handy Viewer 3D - settings stored in Documents\Handy Viewer 3D\config.json
 #pragma once
 
 #include <array>
@@ -44,6 +44,7 @@ struct Config {
     bool enabled = true;
     std::array<int, 3> keyColour{255, 0, 255}; // must match Virtual Desktop's chroma key colour
     float placeDistanceM = 0.6f;
+    bool wheelPlaced = false; // false until the wheel window has been placed once
     float nudgeMm = 5.0f;
     float nudgeDeg = 1.0f;
     SteeringSettings steering;

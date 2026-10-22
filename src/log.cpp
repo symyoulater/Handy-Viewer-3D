@@ -35,11 +35,11 @@ const std::wstring& DataDir() {
     static std::wstring dir = [] {
         PWSTR base = nullptr;
         std::wstring d;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &base))) {
-            d = std::wstring(base) + L"\\HandyViewer3D";
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &base))) {
+            d = std::wstring(base) + L"\\Handy Viewer 3D";
             CoTaskMemFree(base);
         } else {
-            d = L"C:\\HandyViewer3D";
+            d = L"C:\\Handy Viewer 3D";
         }
         CreateDirectoryW(d.c_str(), nullptr);
         CreateDirectoryW((d + L"\\shapes").c_str(), nullptr);

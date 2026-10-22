@@ -78,6 +78,7 @@ bool SaveConfig(const Config& c) {
     j["enabled"] = c.enabled;
     j["key_colour_rgb"] = {c.keyColour[0], c.keyColour[1], c.keyColour[2]};
     j["place_distance_m"] = c.placeDistanceM;
+    j["wheel_placed"] = c.wheelPlaced;
     j["nudge_mm"] = c.nudgeMm;
     j["nudge_deg"] = c.nudgeDeg;
     j["steering"] = {{"range_deg", c.steering.rangeDeg},
@@ -140,6 +141,7 @@ bool LoadConfig(Config& c) {
         if (j.contains("key_colour_rgb") && j["key_colour_rgb"].size() == 3)
             for (int i = 0; i < 3; ++i) c.keyColour[i] = j["key_colour_rgb"][i].get<int>();
         c.placeDistanceM = j.value("place_distance_m", d.placeDistanceM);
+        c.wheelPlaced = j.value("wheel_placed", d.wheelPlaced);
         c.nudgeMm = j.value("nudge_mm", d.nudgeMm);
         c.nudgeDeg = j.value("nudge_deg", d.nudgeDeg);
         if (j.contains("steering")) {
