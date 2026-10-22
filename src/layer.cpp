@@ -36,7 +36,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.4.1"
+#define HV_VERSION "0.4.2"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -208,33 +208,77 @@ void Rasterise(Window& w) {
         w.texW = texW;
         w.texH = texH;
     }
+    const float mmPerPxX = 2.0f * w.halfWmm / texW, mmPerPxY = 2.0f * w.halfHmm / texH;
+    const size_t n = (size_t)texW * texH;
 
-    w.pixels.assign((size_t)texW * texH * 4, 0);
-    const uint8_t kr = (uint8_t)g.cfg.keyColour[0], kg = (uint8_t)g.cfg.keyColour[1], kb = (uint8_t)g.cfg.keyColour[2];
+    // 1. Fill the shape a row at a time: find where each row crosses the outline (fast scanline fill).
+    std::vector<uint8_t> inside(n, 0);
+    std::vector<float> xs;
+    const auto& pts = w.shape.points;
     for (int row = 0; row < texH; ++row) {
-        float y = w.halfHmm - (row + 0.5f) * (2.0f * w.halfHmm / texH);
-        for (int col = 0; col < texW; ++col) {
-            float x = -w.halfWmm + (col + 0.5f) * (2.0f * w.halfWmm / texW);
-            uint8_t r = 0, gg = 0, b = 0, a = 0;
-            bool insideShape = PointInPolygon(w.shape.points, x, y);
-            // Distance to the outline is only needed for the hand margin and the selection outline,
-            // and only near the shape; skip it elsewhere (this keeps redraws quick).
-            float edge = 1e9f;
-            if (!insideShape && (margin > 0 || w.highlighted) &&
-                std::fabs(x) <= maxX + margin + 3.0f && std::fabs(y) <= maxY + margin + 3.0f)
-                edge = DistanceToEdges(w.shape.points, x, y);
-            bool inside = insideShape || edge <= margin;
-            if (w.highlighted && ((margin > 0 && !insideShape && std::fabs(edge - margin) < 2.5f) ||
-                                  (margin <= 0 && (insideShape ? DistanceToEdges(w.shape.points, x, y) : edge) < 2.5f))) {
-                r = 255; gg = 220; b = 0; a = 255; // selection outline, at the window's outer edge
-            } else if (inside) {
-                r = kr; gg = kg; b = kb; a = 255;
-            }
-            uint8_t* px = &w.pixels[((size_t)row * texW + col) * 4];
-            if (g.bgra) { px[0] = b; px[1] = gg; px[2] = r; }
-            else { px[0] = r; px[1] = gg; px[2] = b; }
-            px[3] = a;
+        float y = w.halfHmm - (row + 0.5f) * mmPerPxY;
+        xs.clear();
+        for (size_t i = 0, j = pts.size() - 1; i < pts.size(); j = i++) {
+            float yi = pts[i].second, yj = pts[j].second;
+            if ((yi > y) != (yj > y))
+                xs.push_back(pts[i].first + (y - yi) * (pts[j].first - pts[i].first) / (yj - yi));
         }
+        std::sort(xs.begin(), xs.end());
+        for (size_t k = 0; k + 1 < xs.size(); k += 2) {
+            int c0 = std::max(0, (int)std::ceil((xs[k] + w.halfWmm) / mmPerPxX - 0.5f));
+            int c1 = std::min(texW - 1, (int)std::floor((xs[k + 1] + w.halfWmm) / mmPerPxX - 0.5f));
+            for (int c = c0; c <= c1; ++c) inside[(size_t)row * texW + c] = 1;
+        }
+    }
+
+    // 2. Distance from every outside pixel to the shape, in two sweeps (a distance transform),
+    //    for the hand margin and the selection outline.
+    std::vector<float> dist(n, 0.0f);
+    if (margin > 0 || w.highlighted) {
+        const int far = 1 << 14;
+        std::vector<int16_t> dx(n), dy(n);
+        for (size_t i = 0; i < n; ++i) { dx[i] = inside[i] ? 0 : far; dy[i] = inside[i] ? 0 : far; }
+        auto len2 = [](int a, int b) { return a * a + b * b; };
+        auto relax = [&](int x, int y, int ox, int oy) {
+            int nx = x + ox, ny = y + oy;
+            if (nx < 0 || ny < 0 || nx >= texW || ny >= texH) return;
+            size_t i = (size_t)y * texW + x, j = (size_t)ny * texW + nx;
+            int vx = dx[j] == far ? far : dx[j] - ox;
+            int vy = dy[j] == far ? far : dy[j] - oy;
+            if (vx == far || vy == far) return;
+            if (len2(vx, vy) < len2(dx[i] == far ? far : dx[i], dy[i] == far ? far : dy[i])) { dx[i] = (int16_t)vx; dy[i] = (int16_t)vy; }
+        };
+        for (int y = 0; y < texH; ++y) {
+            for (int x = 0; x < texW; ++x) { relax(x, y, -1, 0); relax(x, y, -1, -1); relax(x, y, 0, -1); relax(x, y, 1, -1); }
+            for (int x = texW - 1; x >= 0; --x) relax(x, y, 1, 0);
+        }
+        for (int y = texH - 1; y >= 0; --y) {
+            for (int x = texW - 1; x >= 0; --x) { relax(x, y, 1, 0); relax(x, y, 1, 1); relax(x, y, 0, 1); relax(x, y, -1, 1); }
+            for (int x = 0; x < texW; ++x) relax(x, y, -1, 0);
+        }
+        for (size_t i = 0; i < n; ++i) {
+            if (inside[i]) continue;
+            if (dx[i] == far || dy[i] == far) { dist[i] = 1e9f; continue; }
+            float ex = dx[i] * mmPerPxX, ey = dy[i] * mmPerPxY;
+            dist[i] = std::sqrt(ex * ex + ey * ey);
+        }
+    }
+
+    // 3. Colour the pixels.
+    w.pixels.assign(n * 4, 0);
+    const uint8_t kr = (uint8_t)g.cfg.keyColour[0], kg = (uint8_t)g.cfg.keyColour[1], kb = (uint8_t)g.cfg.keyColour[2];
+    for (size_t i = 0; i < n; ++i) {
+        uint8_t r = 0, gg = 0, b = 0, a = 0;
+        bool in = inside[i] || dist[i] <= margin;
+        if (w.highlighted && !inside[i] && std::fabs(dist[i] - margin) < 2.5f) {
+            r = 255; gg = 220; b = 0; a = 255; // selection outline, at the window's outer edge
+        } else if (in) {
+            r = kr; gg = kg; b = kb; a = 255;
+        }
+        uint8_t* px = &w.pixels[i * 4];
+        if (g.bgra) { px[0] = b; px[1] = gg; px[2] = r; }
+        else { px[0] = r; px[1] = gg; px[2] = b; }
+        px[3] = a;
     }
     w.needsUpload = true;
 }

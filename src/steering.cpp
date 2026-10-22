@@ -130,14 +130,34 @@ float Normalise(const OpenDevice& d, ULONG raw) {
     return static_cast<float>(t * 2.0 - 1.0);
 }
 
+// Read a value from a raw input report into g_value. Returns true if the report held the axis.
+bool TakeReport(const OpenDevice& dev, std::vector<BYTE>& report) {
+    ULONG raw = 0;
+    if (HidP_GetUsageValue(HidP_Input, 0x01, 0, 0x30, &raw, dev.preparsed, reinterpret_cast<PCHAR>(report.data()),
+                           (ULONG)report.size()) != HIDP_STATUS_SUCCESS)
+        return false;
+    g_value = Normalise(dev, raw);
+    return true;
+}
+
+// Ask the base for its current position. Bases only send reports when something changes,
+// so this gives a position straight away, even if the wheel is sitting still.
+void AskForPosition(const OpenDevice& dev) {
+    std::vector<BYTE> report(dev.caps.InputReportByteLength);
+    if (report.empty()) return;
+    report[0] = dev.xCaps.ReportID;
+    if (HidD_GetInputReport(dev.handle, report.data(), (ULONG)report.size())) TakeReport(dev, report);
+}
+
 void ReaderThread() {
     OpenDevice dev;
     DWORD lastSearch = 0;
+    DWORD lastAsk = 0;
     while (g_run) {
         if (dev.handle == INVALID_HANDLE_VALUE) {
             g_found = false;
             DWORD now = GetTickCount();
-            if (lastSearch && now - lastSearch < 3000) {
+            if (lastSearch && now - lastSearch < 1000) {
                 Sleep(200);
                 continue;
             }
@@ -149,6 +169,10 @@ void ReaderThread() {
                 }
                 Log("Wheel base found: %s (axis %d..%d, %u bits)", Narrow(dev.name).c_str(),
                     (int)dev.xCaps.LogicalMin, (int)dev.xCaps.LogicalMax, (unsigned)dev.xCaps.BitSize);
+                // Connected counts as found, whether or not the wheel has moved yet.
+                AskForPosition(dev);
+                lastAsk = GetTickCount();
+                g_found = true;
             } else {
                 static bool warned = false;
                 if (!warned) Log("No wheel base matching \"%s\" yet - will keep looking", g_match.c_str());
@@ -169,22 +193,24 @@ void ReaderThread() {
                 CancelIo(dev.handle);
                 GetOverlappedResult(dev.handle, &ov, &got, TRUE);
                 CloseHandle(ov.hEvent);
-                continue; // no change from the wheel; try again
+                // No change from the wheel; check its position once a second anyway.
+                if (GetTickCount() - lastAsk > 1000) {
+                    AskForPosition(dev);
+                    lastAsk = GetTickCount();
+                }
+                continue;
             }
         }
+        DWORD readError = done ? 0 : GetLastError();
         CloseHandle(ov.hEvent);
+        if (!done && readError == ERROR_OPERATION_ABORTED) continue; // our own cancel; not a disconnect
         if (!done) {
-            Log("Lost contact with wheel base - will reconnect");
+            Log("Lost contact with wheel base (error %lu) - will reconnect", readError);
             dev.Close();
             continue;
         }
 
-        ULONG raw = 0;
-        if (HidP_GetUsageValue(HidP_Input, 0x01, 0, 0x30, &raw, dev.preparsed, reinterpret_cast<PCHAR>(report.data()),
-                               (ULONG)report.size()) == HIDP_STATUS_SUCCESS) {
-            g_value = Normalise(dev, raw);
-            g_found = true;
-        }
+        if (TakeReport(dev, report)) g_found = true;
     }
     dev.Close();
 }
