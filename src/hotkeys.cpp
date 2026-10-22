@@ -64,34 +64,38 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
     if (vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT) g_shift = down;
 
     if (g_edit) {
-        // Edit mode: catch everything except the Windows keys, so nothing reaches the game.
-        if (vk == VK_LWIN || vk == VK_RWIN) return CallNextHookEx(nullptr, code, wParam, lParam);
+        // Edit mode: only Handy Viewer 3D's own keys are caught; everything else still works normally.
         if (down) {
-            g_lastEditKey = GetTickCount();
             bool ctrlAlt = Held(VK_CONTROL) && Held(VK_MENU);
-            if (vk == VK_ESCAPE || vk == VK_RETURN || (ctrlAlt && vk == 'H')) {
+            if (vk == VK_ESCAPE || (ctrlAlt && vk == 'H')) {
                 g_edit = false;
                 Push(Action::EditModeOff, false);
-            } else if (ctrlAlt && vk == 'V') {
+                return 1;
+            }
+            if (ctrlAlt && vk == 'V') {
                 Push(Action::ToggleAll, false);
-            } else {
-                Action a = EditAction(vk);
-                if (a != Action::None) Push(a, g_shift);
+                return 1;
+            }
+            Action a = ctrlAlt ? Action::None : EditAction(vk);
+            if (a != Action::None) {
+                g_lastEditKey = GetTickCount();
+                Push(a, g_shift);
+                return 1;
             }
         }
-        return 1;
+        // Key releases are never caught: swallowing a release leaves Windows thinking the key
+        // (e.g. Ctrl or Alt) is still held, which makes the whole keyboard misbehave.
+        return CallNextHookEx(nullptr, code, wParam, lParam);
     }
 
     // Normal driving: only our two shortcuts are caught.
-    if (Held(VK_CONTROL) && Held(VK_MENU) && (vk == 'H' || vk == 'V')) {
-        if (down) {
-            if (vk == 'H') {
-                g_edit = true;
-                g_lastEditKey = GetTickCount();
-                Push(Action::EditModeOn, false);
-            } else {
-                Push(Action::ToggleAll, false);
-            }
+    if (down && Held(VK_CONTROL) && Held(VK_MENU) && (vk == 'H' || vk == 'V')) {
+        if (vk == 'H') {
+            g_edit = true;
+            g_lastEditKey = GetTickCount();
+            Push(Action::EditModeOn, false);
+        } else {
+            Push(Action::ToggleAll, false);
         }
         return 1;
     }
@@ -113,7 +117,7 @@ void HookThread() {
     // A timer wakes the loop so edit mode can time out if forgotten.
     SetTimer(nullptr, 0, 1000, nullptr);
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (g_edit && GetTickCount() - g_lastEditKey > 120000) {
+        if (g_edit && GetTickCount() - g_lastEditKey > 30000) {
             g_edit = false;
             Push(Action::EditModeOff, false);
         }

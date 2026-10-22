@@ -1,8 +1,8 @@
 // Handy Viewer 3D - keyboard control with an "edit mode".
 //
-// Ctrl+Alt+H switches edit mode on and off. While edit mode is on, every key press is
-// caught by Handy Viewer 3D and never reaches the game, so plain keys (arrows, letters)
-// can be used for adjusting windows without clashing with the sim's own bindings.
+// Ctrl+Alt+H switches edit mode on and off. While edit mode is on, only the adjustment keys
+// are caught (they don't reach the game); every other key works as normal. Edit mode ends
+// with Esc, Ctrl+Alt+H, or after 30 seconds without an adjustment key.
 // Outside edit mode only Ctrl+Alt+H and Ctrl+Alt+V are caught; everything else goes to the game.
 #pragma once
 
