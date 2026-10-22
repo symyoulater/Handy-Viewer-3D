@@ -105,6 +105,7 @@ bool SaveConfig(const Config& c) {
                         {"width_mm", w.widthMm},
                         {"height_mm", w.heightMm},
                         {"enabled", w.enabled},
+                        {"only_while_adjusting", w.onlyWhileAdjusting},
                         {"pose", PoseToJson(w.pose)}});
     }
     j["windows"] = wins;
@@ -181,6 +182,7 @@ bool LoadConfig(Config& c) {
                 r.widthMm = w.value("width_mm", r.widthMm);
                 r.heightMm = w.value("height_mm", r.heightMm);
                 r.enabled = w.value("enabled", true);
+                r.onlyWhileAdjusting = w.value("only_while_adjusting", false);
                 if (w.contains("pose")) PoseFromJson(w["pose"], r.pose);
                 c.windows.push_back(r);
             }

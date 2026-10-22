@@ -37,6 +37,7 @@ struct RectWindow {
     float widthMm = 130.0f;
     float heightMm = 95.0f;
     bool enabled = true;
+    bool onlyWhileAdjusting = false; // e.g. a keyboard window: shown only in edit mode / while the app adjusts
     Pose pose;
 };
 

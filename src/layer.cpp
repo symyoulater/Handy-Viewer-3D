@@ -36,7 +36,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.4.0"
+#define HV_VERSION "0.4.1"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -199,7 +199,7 @@ void Rasterise(Window& w) {
     w.halfWmm = maxX + margin + border;
     w.halfHmm = maxY + margin + border;
 
-    const float pxPerMm = std::min(3.0f, 1024.0f / (2.0f * std::max(w.halfWmm, w.halfHmm)));
+    const float pxPerMm = std::min(2.0f, 1024.0f / (2.0f * std::max(w.halfWmm, w.halfHmm)));
     int texW = std::max(16, (int)std::ceil(2.0f * w.halfWmm * pxPerMm));
     int texH = std::max(16, (int)std::ceil(2.0f * w.halfHmm * pxPerMm));
     if (texW != w.texW || texH != w.texH) {
@@ -216,10 +216,15 @@ void Rasterise(Window& w) {
             float x = -w.halfWmm + (col + 0.5f) * (2.0f * w.halfWmm / texW);
             uint8_t r = 0, gg = 0, b = 0, a = 0;
             bool insideShape = PointInPolygon(w.shape.points, x, y);
-            float edge = insideShape ? 0.0f : DistanceToEdges(w.shape.points, x, y);
+            // Distance to the outline is only needed for the hand margin and the selection outline,
+            // and only near the shape; skip it elsewhere (this keeps redraws quick).
+            float edge = 1e9f;
+            if (!insideShape && (margin > 0 || w.highlighted) &&
+                std::fabs(x) <= maxX + margin + 3.0f && std::fabs(y) <= maxY + margin + 3.0f)
+                edge = DistanceToEdges(w.shape.points, x, y);
             bool inside = insideShape || edge <= margin;
             if (w.highlighted && ((margin > 0 && !insideShape && std::fabs(edge - margin) < 2.5f) ||
-                                  (margin <= 0 && DistanceToEdges(w.shape.points, x, y) < 2.5f))) {
+                                  (margin <= 0 && (insideShape ? DistanceToEdges(w.shape.points, x, y) : edge) < 2.5f))) {
                 r = 255; gg = 220; b = 0; a = 255; // selection outline, at the window's outer edge
             } else if (inside) {
                 r = kr; gg = kg; b = kb; a = 255;
@@ -588,6 +593,27 @@ void HandleHotkeys(XrTime displayTime) {
     for (int i = 0; i < n; ++i) DoAction(actions[i], fine, displayTime);
 }
 
+// Measures how long Thin Place VR's own work takes each frame and logs it every 30 seconds,
+// so any frame-rate cost can be told apart from the game's.
+void RecordFrameCost(long long ticks) {
+    static LARGE_INTEGER freq = [] { LARGE_INTEGER f; QueryPerformanceFrequency(&f); return f; }();
+    static double total = 0, worst = 0;
+    static long frames = 0;
+    static DWORD since = GetTickCount();
+    double ms = 1000.0 * (double)ticks / (double)freq.QuadPart;
+    total += ms;
+    worst = std::max(worst, ms);
+    ++frames;
+    DWORD now = GetTickCount();
+    if (now - since >= 30000) {
+        Log("Frame cost: %.3f ms average, %.2f ms worst, over %ld frames (%.0f fps)", total / frames, worst, frames,
+            frames * 1000.0 / (now - since));
+        total = worst = 0;
+        frames = 0;
+        since = now;
+    }
+}
+
 // Steering angle as the wheel window shows it (after range, flip and centre).
 bool SteeringDeg(float& out) {
     float v = 0.0f;
@@ -816,6 +842,8 @@ XrResult XRAPI_CALL Hook_xrDestroySession(XrSession session) {
 XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* info) {
     if (session != g.session || g.gfx == Gfx::None || !info) return next.EndFrame(session, info);
 
+    LARGE_INTEGER t0, t1;
+    QueryPerformanceCounter(&t0);
     try {
         if (!g.loggedFirstFrame) {
             Log("First frame - adding windows");
@@ -851,12 +879,15 @@ XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* inf
             }
             for (size_t i = 0; i < g.rects.size() && i < g.cfg.windows.size() && nq < 16; ++i) {
                 if (!g.cfg.windows[i].enabled) continue;
+                if (g.cfg.windows[i].onlyWhileAdjusting && !InEditMode() && GetTickCount() >= g.highlightUntil) continue;
                 Window& w = g.rects[i];
                 if (w.needsUpload && !Upload(w)) continue;
                 quads[nq++] = MakeQuad(w, ToXrPose(g.cfg.windows[i].pose, 0.0f));
             }
         }
 
+        QueryPerformanceCounter(&t1);
+        RecordFrameCost(t1.QuadPart - t0.QuadPart);
         if (nq == 0) return next.EndFrame(session, info);
         for (int i = 0; i < nq; ++i) layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quads[i]));
         XrFrameEndInfo mod = *info;
