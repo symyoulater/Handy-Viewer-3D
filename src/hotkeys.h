@@ -8,22 +8,24 @@
 
 namespace hv {
 
-enum class Action {
-    None,
-    EditModeOn,
-    EditModeOff,
-    ToggleAll,       // Ctrl+Alt+V (any time)
-    SelectNext,      // Tab
-    PlaceInFront,    // P
-    NextWheel,       // W
-    CentreSteering,  // X
-    InvertSteering,  // I
-    MoveLeft, MoveRight, MoveUp, MoveDown, // arrow keys
-    MoveAway, MoveCloser,                 // R / F
-    TiltUp, TiltDown,                     // T / G
-    TurnLeft, TurnRight,                  // Q / E
-    RollLeft, RollRight,                  // Z / C
-    Bigger, Smaller,                      // = / -
+// Numbers are fixed: the desktop app sends them over the live link (app/Link.cs).
+enum class Action : int {
+    None = 0,
+    EditModeOn = 1,
+    EditModeOff = 2,
+    ToggleAll = 3,       // Ctrl+Alt+V (any time)
+    SelectNext = 4,      // Tab
+    PlaceInFront = 5,    // P
+    NextWheel = 6,       // W
+    CentreSteering = 7,  // X
+    InvertSteering = 8,  // I
+    MoveLeft = 9, MoveRight = 10, MoveUp = 11, MoveDown = 12, // arrow keys
+    MoveAway = 13, MoveCloser = 14,                           // R / F
+    TiltUp = 15, TiltDown = 16,                               // T / G
+    TurnLeft = 17, TurnRight = 18,                            // Q / E
+    RollLeft = 19, RollRight = 20,                            // Z / C
+    Bigger = 21, Smaller = 22,                                // = / -
+    Select = 23,         // app only: select the target window and outline it
 };
 
 void StartHotkeys();

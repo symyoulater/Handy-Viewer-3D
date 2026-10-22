@@ -11,6 +11,7 @@ extern "C" {
 
 #include <algorithm>
 #include <atomic>
+#include <mutex>
 #include <cwctype>
 #include <thread>
 #include <vector>
@@ -24,6 +25,8 @@ std::atomic<bool> g_found{false};
 std::atomic<float> g_value{0.0f};
 std::thread g_thread;
 std::string g_match;
+std::mutex g_nameMutex;
+std::string g_deviceName;
 
 struct OpenDevice {
     HANDLE handle = INVALID_HANDLE_VALUE;
@@ -140,6 +143,10 @@ void ReaderThread() {
             }
             lastSearch = now;
             if (FindDevice(dev)) {
+                {
+                    std::lock_guard<std::mutex> lock(g_nameMutex);
+                    g_deviceName = Narrow(dev.name);
+                }
                 Log("Wheel base found: %s (axis %d..%d, %u bits)", Narrow(dev.name).c_str(),
                     (int)dev.xCaps.LogicalMin, (int)dev.xCaps.LogicalMax, (unsigned)dev.xCaps.BitSize);
             } else {
@@ -195,6 +202,11 @@ void StopSteeringReader() {
     if (!g_run) return;
     g_run = false;
     if (g_thread.joinable()) g_thread.join();
+}
+
+std::string GetSteeringDeviceName() {
+    std::lock_guard<std::mutex> lock(g_nameMutex);
+    return g_found ? g_deviceName : std::string();
 }
 
 bool GetSteeringNormalised(float& out) {

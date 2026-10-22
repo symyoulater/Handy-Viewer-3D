@@ -38,6 +38,9 @@ Source: "{#StageDir}\ThinPlaceVR.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\ThinPlaceVRCheck.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\ThinPlaceVR.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\ThinPlaceVR.exe.config"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\Microsoft.Web.WebView2.*.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\WebView2Loader.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\ui\*"; DestDir: "{app}\ui"; Flags: ignoreversion recursesubdirs
 Source: "{#StageDir}\XR_APILAYER_SYMYOULATER_thin_place_vr.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\shapes\*"; DestDir: "{app}\shapes"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion

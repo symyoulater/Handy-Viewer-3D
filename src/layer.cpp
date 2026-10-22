@@ -29,8 +29,14 @@
 #include "log.h"
 #include "mathutil.h"
 #include "steering.h"
+#include "shared.h"
 
-#define HV_VERSION "0.3.2"
+#include <nlohmann/json.hpp>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+
+#define HV_VERSION "0.4.0"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -110,6 +116,12 @@ struct State {
     bool loggedFirstFrame = false;
     int framesSinceStart = 0;
     bool loggedError = false;
+
+    // Live link to the desktop app
+    LinkBlock* link = nullptr;
+    uint32_t lastCmdSeq = 0;
+    std::string gameName, gameExe, runtimeName;
+    bool gameRecorded = false;
 } g;
 
 // ---------------------------------------------------------------------------
@@ -465,16 +477,13 @@ bool PlaceSelectedInFront(XrTime displayTime) {
     return true;
 }
 
-void HandleHotkeys(XrTime displayTime) {
-    Action actions[8];
-    bool fine = false;
-    int n = PollHotkeys(actions, 8, fine);
+// One adjustment, from a hotkey or from the desktop app.
+void DoAction(Action action, bool fine, XrTime displayTime) {
     float step = (fine ? 1.0f : g.cfg.nudgeMm) / 1000.0f;
     float deg = fine ? 0.25f : g.cfg.nudgeDeg;
-
-    for (int i = 0; i < n; ++i) {
+    {
         Pose* p = SelectedPose();
-        switch (actions[i]) {
+        switch (action) {
         case Action::EditModeOn:
             Log("Edit mode on - adjusting %s", SelectedName());
             Highlight();
@@ -529,7 +538,7 @@ void HandleHotkeys(XrTime displayTime) {
             break;
         default:
             if (!p) break;
-            switch (actions[i]) {
+            switch (action) {
             case Action::MoveLeft: MoveLocal(*p, -step, 0, 0); break;
             case Action::MoveRight: MoveLocal(*p, step, 0, 0); break;
             case Action::MoveUp: MoveLocal(*p, 0, step, 0); break;
@@ -547,14 +556,14 @@ void HandleHotkeys(XrTime displayTime) {
                 if (g.selected == 0) {
                     WheelProfile* wp = ActiveWheel();
                     if (!wp) break;
-                    float step = (fine ? 0.005f : 0.02f) * (actions[i] == Action::Bigger ? 1.0f : -1.0f);
+                    float step = (fine ? 0.005f : 0.02f) * (action == Action::Bigger ? 1.0f : -1.0f);
                     wp->scale = std::clamp(wp->scale + step, 0.5f, 2.0f);
                     Log("Wheel window size %.0f%%", wp->scale * 100.0f);
                     RebuildWindows();
                     break;
                 }
                 RectWindow& rw = g.cfg.windows[g.selected - 1];
-                float d = (actions[i] == Action::Bigger ? 1.0f : -1.0f) * (fine ? 1.0f : g.cfg.nudgeMm);
+                float d = (action == Action::Bigger ? 1.0f : -1.0f) * (fine ? 1.0f : g.cfg.nudgeMm);
                 rw.widthMm = std::max(20.0f, rw.widthMm + d);
                 rw.heightMm = std::max(20.0f, rw.heightMm + d);
                 float hx = rw.widthMm * 0.5f, hy = rw.heightMm * 0.5f;
@@ -569,6 +578,87 @@ void HandleHotkeys(XrTime displayTime) {
             MarkChanged();
             break;
         }
+    }
+}
+
+void HandleHotkeys(XrTime displayTime) {
+    Action actions[8];
+    bool fine = false;
+    int n = PollHotkeys(actions, 8, fine);
+    for (int i = 0; i < n; ++i) DoAction(actions[i], fine, displayTime);
+}
+
+// Steering angle as the wheel window shows it (after range, flip and centre).
+bool SteeringDeg(float& out) {
+    float v = 0.0f;
+    if (!GetSteeringNormalised(v)) return false;
+    float angle = v * g.cfg.steering.rangeDeg * 0.5f;
+    if (g.cfg.steering.invert) angle = -angle;
+    out = angle - g.cfg.steering.centreOffsetDeg;
+    return true;
+}
+
+void CopyText(char* dst, size_t size, const std::string& src) {
+    size_t n = std::min(size - 1, src.size());
+    memcpy(dst, src.data(), n);
+    dst[n] = 0;
+}
+
+// Publish live status to the app and carry out any command it sent.
+void ProcessLink(XrTime displayTime) {
+    LinkBlock* l = g.link;
+    if (!l) return;
+    float deg = 0.0f;
+    bool found = SteeringDeg(deg);
+    l->steeringDeg = found ? deg : 0.0f;
+    l->wheelFound = found ? 1 : 0;
+    l->windowsEnabled = g.cfg.enabled ? 1 : 0;
+    l->selected = g.selected;
+    l->editMode = InEditMode() ? 1 : 0;
+    CopyText(l->game, sizeof(l->game), g.gameName);
+    CopyText(l->runtime, sizeof(l->runtime), g.runtimeName);
+    CopyText(l->wheelBase, sizeof(l->wheelBase), GetSteeringDeviceName());
+    l->heartbeatMs = GetTickCount64();
+
+    uint32_t seq = l->cmdSeq;
+    if (seq == g.lastCmdSeq) return;
+    g.lastCmdSeq = seq;
+    MemoryBarrier();
+    int target = l->cmdTarget;
+    Action action = static_cast<Action>(l->cmdAction);
+    bool fine = l->cmdFine != 0;
+    if (target >= 0 && target <= (int)g.rects.size()) g.selected = target;
+    if (action == Action::Select) {
+        Log("App selected %s", SelectedName());
+        Highlight();
+        return;
+    }
+    Log("App command %d on %s", (int)action, SelectedName());
+    DoAction(action, fine, displayTime);
+}
+
+// Remember which games have used Thin Place VR, for the app's Home page.
+void RecordGame() {
+    try {
+        std::wstring path = LogDir() + L"\\games.json";
+        nlohmann::json j = nlohmann::json::object();
+        {
+            std::ifstream f{std::filesystem::path(path)};
+            if (f) {
+                std::stringstream ss;
+                ss << f.rdbuf();
+                j = nlohmann::json::parse(ss.str(), nullptr, false);
+                if (!j.is_object()) j = nlohmann::json::object();
+            }
+        }
+        SYSTEMTIME t;
+        GetLocalTime(&t);
+        char when[32];
+        snprintf(when, sizeof(when), "%04d-%02d-%02dT%02d:%02d:%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+        j[g.gameExe.empty() ? g.gameName : g.gameExe] = {{"name", g.gameName}, {"last_used", when}, {"working", true}};
+        std::ofstream f{std::filesystem::path(path), std::ios::trunc};
+        f << j.dump(2);
+    } catch (...) {
     }
 }
 
@@ -676,6 +766,8 @@ void SetupSession(XrSession session, const XrSessionCreateInfo* info) {
     g.structureDirty = true;
     StartSteeringReader(g.cfg.steering.deviceMatch);
     StartHotkeys();
+    g.link = OpenLink();
+    if (g.link) g.lastCmdSeq = g.link->cmdSeq; // ignore anything sent before this session
 }
 
 void TeardownSession() {
@@ -737,6 +829,8 @@ XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* inf
             else g.framesSinceStart = 0;
         }
         HandleHotkeys(info->displayTime);
+        ProcessLink(info->displayTime);
+        if (!g.gameRecorded) { RecordGame(); g.gameRecorded = true; }
         CheckConfig();
         if (g.structureDirty) RebuildWindows();
         ClearHighlightIfExpired();
@@ -750,13 +844,8 @@ XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* inf
             if (wp && g.wheel.shape.valid()) {
                 if (!g.wheel.needsUpload || Upload(g.wheel)) {
                     float spin = 0.0f;
-                    float v = 0.0f;
-                    if (wp->rotates && GetSteeringNormalised(v)) {
-                        float angle = v * g.cfg.steering.rangeDeg * 0.5f;
-                        if (g.cfg.steering.invert) angle = -angle;
-                        angle -= g.cfg.steering.centreOffsetDeg;
-                        spin = -angle; // turning right = clockwise as you look at it
-                    }
+                    float angle = 0.0f;
+                    if (wp->rotates && SteeringDeg(angle)) spin = -angle; // turning right = clockwise
                     quads[nq++] = MakeQuad(g.wheel, ToXrPose(wp->pose, spin));
                 }
             }
@@ -791,6 +880,8 @@ XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* inf
 XrResult XRAPI_CALL Hook_xrDestroyInstance(XrInstance instance) {
     if (g.session) { try { TeardownSession(); } catch (...) {} }
     StopHotkeys();
+    CloseLink();
+    g.link = nullptr;
     StopSteeringReader();
     XrResult r = next.DestroyInstance(instance);
     g.instance = XR_NULL_HANDLE;
@@ -828,6 +919,14 @@ XrResult XRAPI_CALL Hook_xrCreateApiLayerInstance(const XrInstanceCreateInfo* in
     if (XR_FAILED(r)) return r;
 
     g.instance = *instance;
+    g.gameName = info->applicationInfo.applicationName;
+    {
+        wchar_t exe[MAX_PATH] = {};
+        GetModuleFileNameW(nullptr, exe, MAX_PATH);
+        std::wstring e(exe);
+        auto slash = e.find_last_of(L"\\/");
+        g.gameExe = Narrow(slash == std::wstring::npos ? e : e.substr(slash + 1));
+    }
     Resolve(*instance, "xrDestroyInstance", next.DestroyInstance);
     Resolve(*instance, "xrCreateSession", next.CreateSession);
     Resolve(*instance, "xrDestroySession", next.DestroySession);
@@ -848,6 +947,7 @@ XrResult XRAPI_CALL Hook_xrCreateApiLayerInstance(const XrInstanceCreateInfo* in
     PFN_xrGetInstanceProperties getProps = nullptr;
     Resolve(*instance, "xrGetInstanceProperties", getProps);
     if (getProps) getProps(*instance, &props);
+    g.runtimeName = props.runtimeName;
     Log("Thin Place VR %s loaded into \"%s\" (engine \"%s\") - runtime \"%s\"", HV_VERSION,
         info->applicationInfo.applicationName, info->applicationInfo.engineName, props.runtimeName);
     return r;

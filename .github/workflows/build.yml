@@ -31,7 +31,12 @@ jobs:
         run: cmake --install build --config Release --prefix stage
 
       - name: Build desktop app
-        run: dotnet build app/ThinPlaceVR.App.csproj -c Release -p:Version=${{ steps.ver.outputs.version }} -o stage
+        shell: pwsh
+        run: |
+          dotnet build app/ThinPlaceVR.App.csproj -c Release -p:Version=${{ steps.ver.outputs.version }} -o stage
+          # WebView2's loader sometimes lands under runtimes\win-x64; the installer expects it beside the exe.
+          if (-not (Test-Path stage\WebView2Loader.dll)) { Copy-Item stage\runtimes\win-x64\native\WebView2Loader.dll stage\ }
+          Get-ChildItem stage | Select-Object Name, Length
 
       - name: Install Inno Setup
         shell: pwsh

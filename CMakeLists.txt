@@ -21,7 +21,8 @@ add_library(ThinPlaceVR SHARED
     src/config.cpp
     src/steering.cpp
     src/hotkeys.cpp
-    src/log.cpp)
+    src/log.cpp
+    src/shared.cpp)
 
 target_include_directories(ThinPlaceVR PRIVATE
     ${openxr_SOURCE_DIR}/include

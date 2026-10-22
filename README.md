@@ -6,7 +6,7 @@
 
 Thin Place VR adds flat "windows" to any OpenXR game, filled with Virtual Desktop's chroma-key colour (magenta). Virtual Desktop replaces that colour with the Quest 3's passthrough cameras, so your real kit shows through exactly where it sits. The wheel window turns with your Simucube, so it hugs the rim at any steering angle.
 
-**Version 0.3.2** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
+**Version 0.4.0** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
 
 ---
 
@@ -35,14 +35,15 @@ That's it — the next OpenXR game you start will load it.
 
 ## The app
 
-Open **Thin Place VR** from the Start menu or desktop. It shows:
+Open **Thin Place VR** from the Start menu or desktop.
 
-- whether the layer is active, which game last used it, and whether your wheel base was found
-- your settings — rim, steering range, flip direction, Stream Deck window, passthrough colour, step sizes. Changes apply straight away, even mid-drive.
-- **Check for updates**, which downloads and installs the newest version for you
-- shortcuts to the log, the check tool and the settings folder
+- **Home** — whether everything is ready: the VR layer, the runtime, your wheel base and live steering, your windows, and recent games.
+- **Windows** — pick a window, then **Place where I'm looking**, nudge, tilt, turn and roll it while a game is running. You can click these from Virtual Desktop's desktop view without taking the headset off. Add, rename, resize, hide or remove windows here too.
+- **Wheel** — choose the fitted rim, set the steering range and direction, watch the live angle and set the centre.
+- **Passthrough** — the key colour, a Virtual Desktop checklist, step sizes, and troubleshooting tools.
+- **Updates** — the panel in the bottom-left corner checks for new versions and installs them.
 
-Placing windows is still done in the headset (edit mode, below), because it needs to know where you're looking.
+Changes apply straight away, even mid-drive.
 
 ---
 

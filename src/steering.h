@@ -12,4 +12,7 @@ void StopSteeringReader();
 // Steering position from -1 (full left) to +1 (full right). Returns false if no base found yet.
 bool GetSteeringNormalised(float& out);
 
+// Product name of the wheel base being read (empty until found).
+std::string GetSteeringDeviceName();
+
 } // namespace hv
