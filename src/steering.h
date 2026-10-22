@@ -1,4 +1,4 @@
-// Handy Viewer 3D - reads the steering axis straight from the wheel base over USB HID.
+// Thin Place VR - reads the steering axis straight from the wheel base over USB HID.
 // Works whatever the game is doing and needs no window focus.
 #pragma once
 

@@ -6,7 +6,7 @@ using System.IO;
 using System.Text;
 using System.Web.Script.Serialization;
 
-namespace HandyViewer3D
+namespace ThinPlaceVR
 {
     // Reads and writes config.json without disturbing anything the app doesn't edit
     // (window positions placed in the headset, for example). Every save re-reads the

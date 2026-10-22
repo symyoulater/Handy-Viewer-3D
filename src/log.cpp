@@ -36,10 +36,10 @@ const std::wstring& DataDir() {
         PWSTR base = nullptr;
         std::wstring d;
         if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &base))) {
-            d = std::wstring(base) + L"\\Handy Viewer 3D";
+            d = std::wstring(base) + L"\\Thin Place VR";
             CoTaskMemFree(base);
         } else {
-            d = L"C:\\Handy Viewer 3D";
+            d = L"C:\\Thin Place VR";
         }
         CreateDirectoryW(d.c_str(), nullptr);
         CreateDirectoryW((d + L"\\shapes").c_str(), nullptr);
@@ -62,7 +62,7 @@ const std::wstring& ModuleDir() {
     return dir;
 }
 
-// The log goes in C:\ProgramData\Handy Viewer 3D: always writable by games, and not affected by
+// The log goes in C:\ProgramData\Thin Place VR: always writable by games, and not affected by
 // OneDrive folder redirection or Windows "controlled folder access" on Documents.
 const std::wstring& LogDir() {
     // Kernel32 only, so it is safe to call while the DLL is being loaded.
@@ -70,7 +70,7 @@ const std::wstring& LogDir() {
         wchar_t base[MAX_PATH] = {};
         DWORD n = GetEnvironmentVariableW(L"ProgramData", base, MAX_PATH);
         std::wstring d = (n > 0 && n < MAX_PATH) ? std::wstring(base) : std::wstring(L"C:\\ProgramData");
-        d += L"\\Handy Viewer 3D";
+        d += L"\\Thin Place VR";
         CreateDirectoryW(d.c_str(), nullptr);
         return d;
     }();

@@ -7,7 +7,7 @@ using System.Net;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 
-namespace HandyViewer3D
+namespace ThinPlaceVR
 {
     internal sealed class UpdateInfo
     {
@@ -19,12 +19,12 @@ namespace HandyViewer3D
     // Looks for new versions on the repo's GitHub Releases page and installs them.
     internal static class Updater
     {
-        private const string LatestUrl = "https://api.github.com/repos/symyoulater/Handy-Viewer-3D/releases/latest";
+        private const string LatestUrl = "https://api.github.com/repos/symyoulater/Thin-Place-VR/releases/latest";
 
         private static WebClient NewClient()
         {
             var wc = new WebClient();
-            wc.Headers[HttpRequestHeader.UserAgent] = "HandyViewer3D/" + Paths.AppVersion;
+            wc.Headers[HttpRequestHeader.UserAgent] = "ThinPlaceVR/" + Paths.AppVersion;
             wc.Headers[HttpRequestHeader.Accept] = "application/vnd.github+json";
             return wc;
         }
@@ -60,7 +60,7 @@ namespace HandyViewer3D
                 {
                     if (!(o is Dictionary<string, object> asset)) continue;
                     string name = ConfigStore.Str(asset, "name", "");
-                    if (name.StartsWith("HandyViewer3D-Setup", StringComparison.OrdinalIgnoreCase) &&
+                    if (name.StartsWith("ThinPlaceVR-Setup", StringComparison.OrdinalIgnoreCase) &&
                         name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                     {
                         info.FileName = name;

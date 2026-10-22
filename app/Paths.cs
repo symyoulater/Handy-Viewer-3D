@@ -2,28 +2,28 @@ using System;
 using System.IO;
 using System.Reflection;
 
-namespace HandyViewer3D
+namespace ThinPlaceVR
 {
     // The same locations the VR layer uses (see src/log.cpp).
     internal static class Paths
     {
-        // Documents\Handy Viewer 3D - follows OneDrive redirection, just like the layer does.
+        // Documents\Thin Place VR - follows OneDrive redirection, just like the layer does.
         public static string DataDir =>
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Handy Viewer 3D");
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Thin Place VR");
 
         public static string ConfigFile => Path.Combine(DataDir, "config.json");
 
-        // C:\ProgramData\Handy Viewer 3D
+        // C:\ProgramData\Thin Place VR
         public static string LogDir =>
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Handy Viewer 3D");
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Thin Place VR");
 
         public static string LogFile => Path.Combine(LogDir, "layer.log");
 
         public static string AppDir => Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
 
-        public static string CheckTool => Path.Combine(AppDir, "HandyViewer3DCheck.exe");
+        public static string CheckTool => Path.Combine(AppDir, "ThinPlaceVRCheck.exe");
 
-        public static string ManifestFile => Path.Combine(AppDir, "XR_APILAYER_SYMYOULATER_handy_viewer.json");
+        public static string ManifestFile => Path.Combine(AppDir, "XR_APILAYER_SYMYOULATER_thin_place_vr.json");
 
         public static Version AppVersion
         {

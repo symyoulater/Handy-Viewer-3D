@@ -1,4 +1,4 @@
-// Handy Viewer 3D - settings stored in Documents\Handy Viewer 3D\config.json
+// Thin Place VR - settings stored in Documents\Thin Place VR\config.json
 #pragma once
 
 #include <array>

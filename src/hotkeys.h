@@ -1,4 +1,4 @@
-// Handy Viewer 3D - keyboard control with an "edit mode".
+// Thin Place VR - keyboard control with an "edit mode".
 //
 // Ctrl+Alt+H switches edit mode on and off. While edit mode is on, only the adjustment keys
 // are caught (they don't reach the game); every other key works as normal. Edit mode ends

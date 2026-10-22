@@ -1,0 +1,11 @@
+{
+    "file_format_version": "1.0.0",
+    "api_layer": {
+        "name": "XR_APILAYER_SYMYOULATER_thin_place_vr",
+        "library_path": ".\\ThinPlaceVR.dll",
+        "api_version": "1.0",
+        "implementation_version": "1",
+        "description": "Thin Place VR - passthrough windows for your real wheel, hands and Stream Deck",
+        "disable_environment": "DISABLE_THIN_PLACE_VR"
+    }
+}

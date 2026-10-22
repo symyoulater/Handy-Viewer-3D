@@ -1,10 +1,12 @@
-# Handy Viewer 3D
+# Thin Place VR
 
-See your real wheel, hands and Stream Deck while driving in VR.
+**See your real wheel, hands and kit inside VR.**
 
-Handy Viewer 3D adds flat "windows" to any OpenXR game, filled with Virtual Desktop's chroma-key colour (magenta). Virtual Desktop replaces that colour with the Quest 3's passthrough cameras, so your real kit shows through exactly where it sits. The wheel window turns with your Simucube, so it hugs the rim at any steering angle.
+*A thin place is where the veil between two worlds wears thin. This makes a few of them in your cockpit.*
 
-**Version 0.1.5** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
+Thin Place VR adds flat "windows" to any OpenXR game, filled with Virtual Desktop's chroma-key colour (magenta). Virtual Desktop replaces that colour with the Quest 3's passthrough cameras, so your real kit shows through exactly where it sits. The wheel window turns with your Simucube, so it hugs the rim at any steering angle.
+
+**Version 0.3.0** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
 
 ---
 
@@ -23,10 +25,24 @@ In the headset, open Virtual Desktop's menu → **Streaming** tab:
 
 ### 2. Install
 
-1. Download `HandyViewer3D-Setup-x.x.x.exe` from the **Releases** page of this repo.
+1. Download `ThinPlaceVR-Setup-x.x.x.exe` from the **Releases** page of this repo.
+   After that, the **Thin Place VR** app's **Check for updates** button keeps it up to date.
 2. Run it. Windows will warn about an unknown publisher because the installer isn't signed yet: click **More info** → **Run anyway**.
 
 That's it — the next OpenXR game you start will load it.
+
+---
+
+## The app
+
+Open **Thin Place VR** from the Start menu or desktop. It shows:
+
+- whether the layer is active, which game last used it, and whether your wheel base was found
+- your settings — rim, steering range, flip direction, Stream Deck window, passthrough colour, step sizes. Changes apply straight away, even mid-drive.
+- **Check for updates**, which downloads and installs the newest version for you
+- shortcuts to the log, the check tool and the settings folder
+
+Placing windows is still done in the headset (edit mode, below), because it needs to know where you're looking.
 
 ---
 
@@ -34,7 +50,7 @@ That's it — the next OpenXR game you start will load it.
 
 1. Start **Le Mans Ultimate** or **Assetto Corsa EVO** in VR and get into a car.
 2. After a few seconds a window appears straight ahead of you, outlined in yellow, showing your real surroundings. That confirms it's working.
-3. Press **Ctrl+Alt+H** to switch on **edit mode**. While it's on, the adjustment keys below go to Handy Viewer 3D instead of the game; every other key works as normal.
+3. Press **Ctrl+Alt+H** to switch on **edit mode**. While it's on, the adjustment keys below go to Thin Place VR instead of the game; every other key works as normal.
 4. Fit the rim you're using (the **Conspit 300GT** is selected to begin with; **W** swaps to the **310 APEX**).
 5. Hold the wheel straight, sit in your driving position, look at the centre of the wheel and press **P**. The wheel window jumps to where you're looking, 60 cm in front of you.
 6. Nudge it with the keys below until the real rim fills it.
@@ -79,15 +95,15 @@ Hold **Shift** as well for fine steps (1 mm or 0.25°).
 
 ## Settings and logs
 
-Everything lives in **Documents\Handy Viewer 3D**:
+Everything lives in **Documents\Thin Place VR**:
 
 - `config.json` — window positions, wheel choice, steering range (default **900°**, must match Simucube Tuner).
 
-The log is in **C:\ProgramData\Handy Viewer 3D\layer.log** — what happened during the last game session. If something isn't working, this is the file to send.
+The log is in **C:\ProgramData\Thin Place VR\layer.log** — what happened during the last game session. If something isn't working, this is the file to send.
 
 ## Uninstall
 
-Windows **Settings → Apps → Installed apps → Handy Viewer 3D → Uninstall**.
+Windows **Settings → Apps → Installed apps → Thin Place VR → Uninstall**.
 
 ---
 

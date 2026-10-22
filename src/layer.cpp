@@ -1,4 +1,4 @@
-// Handy Viewer 3D - OpenXR API layer.
+// Thin Place VR - OpenXR API layer.
 //
 // Loads into any OpenXR game and adds flat "windows" on top of the game image,
 // filled with Virtual Desktop's chroma-key colour. Virtual Desktop swaps that colour
@@ -30,8 +30,8 @@
 #include "mathutil.h"
 #include "steering.h"
 
-#define HV_VERSION "0.2.0"
-#define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_handy_viewer"
+#define HV_VERSION "0.3.0"
+#define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
 
@@ -830,7 +830,7 @@ XrResult XRAPI_CALL Hook_xrCreateApiLayerInstance(const XrInstanceCreateInfo* in
     PFN_xrGetInstanceProperties getProps = nullptr;
     Resolve(*instance, "xrGetInstanceProperties", getProps);
     if (getProps) getProps(*instance, &props);
-    Log("Handy Viewer 3D %s loaded into \"%s\" (engine \"%s\") - runtime \"%s\"", HV_VERSION,
+    Log("Thin Place VR %s loaded into \"%s\" (engine \"%s\") - runtime \"%s\"", HV_VERSION,
         info->applicationInfo.applicationName, info->applicationInfo.engineName, props.runtimeName);
     return r;
 }
@@ -842,7 +842,7 @@ BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         wchar_t exe[MAX_PATH] = {};
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        hv::Log("Handy Viewer 3D " HV_VERSION " loaded into %s", hv::Narrow(exe).c_str());
+        hv::Log("Thin Place VR " HV_VERSION " loaded into %s", hv::Narrow(exe).c_str());
     }
     return TRUE;
 }

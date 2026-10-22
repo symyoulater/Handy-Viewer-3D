@@ -1,4 +1,4 @@
-// Handy Viewer 3D - small vector / quaternion helpers for OpenXR poses.
+// Thin Place VR - small vector / quaternion helpers for OpenXR poses.
 #pragma once
 
 #include <openxr/openxr.h>

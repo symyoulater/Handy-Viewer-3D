@@ -8,7 +8,7 @@ using System.Linq;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace HandyViewer3D
+namespace ThinPlaceVR
 {
     internal sealed class MainForm : Form
     {
@@ -49,7 +49,7 @@ namespace HandyViewer3D
 
         public MainForm()
         {
-            Text = "Handy Viewer 3D";
+            Text = "Thin Place VR";
             BackColor = Bg;
             ForeColor = Text1;
             Font = _body;
@@ -96,8 +96,8 @@ namespace HandyViewer3D
 
             // Header
             var header = new Panel { Height = 56, Margin = new Padding(0, 0, 0, 6) };
-            header.Controls.Add(new Label { Text = "Handy Viewer 3D", Font = _title, ForeColor = Text1, AutoSize = true, Location = new Point(0, 2) });
-            header.Controls.Add(new Label { Text = "Version " + Paths.AppVersion, Font = _small, ForeColor = Text2, AutoSize = true, Location = new Point(2, 34) });
+            header.Controls.Add(new Label { Text = "Thin Place VR", Font = _title, ForeColor = Text1, AutoSize = true, Location = new Point(0, 2) });
+            header.Controls.Add(new Label { Text = "See your real wheel, hands and kit inside VR  ·  version " + Paths.AppVersion, Font = _small, ForeColor = Text2, AutoSize = true, Location = new Point(2, 34) });
             stack.Controls.Add(header);
 
             // Status
@@ -434,7 +434,7 @@ namespace HandyViewer3D
                 }
             }
             catch { }
-            _statusLayer.Text = registered ? "● Active — loads into OpenXR games" : "● Not registered — reinstall Handy Viewer 3D";
+            _statusLayer.Text = registered ? "● Active — loads into OpenXR games" : "● Not registered — reinstall Thin Place VR";
             _statusLayer.ForeColor = registered ? Good : Warn;
 
             // What happened last time a game loaded it?

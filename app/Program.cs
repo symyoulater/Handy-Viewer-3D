@@ -3,7 +3,7 @@ using System.Net;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace HandyViewer3D
+namespace ThinPlaceVR
 {
     internal static class Program
     {
@@ -11,11 +11,11 @@ namespace HandyViewer3D
         private static void Main()
         {
             // Only one copy of the app at a time; a second launch just brings the first to the front.
-            using (var mutex = new Mutex(true, "HandyViewer3D.App.SingleInstance", out bool first))
+            using (var mutex = new Mutex(true, "ThinPlaceVR.App.SingleInstance", out bool first))
             {
                 if (!first)
                 {
-                    NativeMethods.BringExistingToFront("Handy Viewer 3D");
+                    NativeMethods.BringExistingToFront("Thin Place VR");
                     return;
                 }
 

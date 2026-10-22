@@ -1,5 +1,5 @@
-// Handy Viewer 3D - simple file logger.
-// Writes to Documents\Handy Viewer 3D\layer.log so problems can be diagnosed
+// Thin Place VR - simple file logger.
+// Writes to Documents\Thin Place VR\layer.log so problems can be diagnosed
 // without a debugger attached to the game.
 #pragma once
 
@@ -10,7 +10,7 @@ namespace hv {
 // Folder where config, log and user shapes live (created on first use).
 const std::wstring& DataDir();
 
-// Folder for layer.log (C:\ProgramData\Handy Viewer 3D).
+// Folder for layer.log (C:\ProgramData\Thin Place VR).
 const std::wstring& LogDir();
 
 // Folder the layer DLL was loaded from (holds installed default shapes).

@@ -64,7 +64,7 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
     if (vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT) g_shift = down;
 
     if (g_edit) {
-        // Edit mode: only Handy Viewer 3D's own keys are caught; everything else still works normally.
+        // Edit mode: only Thin Place VR's own keys are caught; everything else still works normally.
         if (down) {
             bool ctrlAlt = Held(VK_CONTROL) && Held(VK_MENU);
             if (vk == VK_ESCAPE || (ctrlAlt && vk == 'H')) {

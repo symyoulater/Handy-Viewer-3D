@@ -1,7 +1,7 @@
-// Handy Viewer 3D - Check
+// Thin Place VR - Check
 // Shows which OpenXR runtime is active, which API layers Windows has registered, and whether
-// Handy Viewer 3D loads when a program starts OpenXR. Writes the report to
-// C:\ProgramData\Handy Viewer 3D\check.txt and shows it on screen.
+// Thin Place VR loads when a program starts OpenXR. Writes the report to
+// C:\ProgramData\Thin Place VR\check.txt and shows it on screen.
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -68,7 +68,7 @@ std::wstring ReadString(HKEY root, const wchar_t* path, const wchar_t* value) {
 } // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    Line(L"Handy Viewer 3D - Check");
+    Line(L"Thin Place VR - Check");
     Line(L"");
     Line(L"Active OpenXR runtime:");
     Line(L"  " + ReadString(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Khronos\\OpenXR\\1", L"ActiveRuntime"));
@@ -86,14 +86,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     bool found = false;
     for (uint32_t i = 0; i < count; ++i) {
         std::wstring n = Widen(layers[i].layerName);
-        if (n == L"XR_APILAYER_SYMYOULATER_handy_viewer") found = true;
+        if (n == L"XR_APILAYER_SYMYOULATER_thin_place_vr") found = true;
         Line(L"  " + n);
     }
-    Line(found ? L"  -> Handy Viewer 3D is accepted by the loader." : L"  -> Handy Viewer 3D is NOT accepted by the loader.");
+    Line(found ? L"  -> Thin Place VR is accepted by the loader." : L"  -> Thin Place VR is NOT accepted by the loader.");
     Line(L"");
 
     XrInstanceCreateInfo ci{XR_TYPE_INSTANCE_CREATE_INFO};
-    strcpy_s(ci.applicationInfo.applicationName, "Handy Viewer 3D Check");
+    strcpy_s(ci.applicationInfo.applicationName, "Thin Place VR Check");
     ci.applicationInfo.apiVersion = XR_MAKE_VERSION(1, 0, 0);
     XrInstance instance = XR_NULL_HANDLE;
     r = xrCreateInstance(&ci, &instance);
@@ -105,11 +105,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         xrDestroyInstance(instance);
     }
     Line(L"");
-    Line(L"If Handy Viewer 3D loaded, C:\\ProgramData\\Handy Viewer 3D\\layer.log now names this check program.");
+    Line(L"If Thin Place VR loaded, C:\\ProgramData\\Thin Place VR\\layer.log now names this check program.");
 
     wchar_t pd[MAX_PATH] = {};
     GetEnvironmentVariableW(L"ProgramData", pd, MAX_PATH);
-    std::wstring dir = std::wstring(pd) + L"\\Handy Viewer 3D";
+    std::wstring dir = std::wstring(pd) + L"\\Thin Place VR";
     CreateDirectoryW(dir.c_str(), nullptr);
     HANDLE f = CreateFileW((dir + L"\\check.txt").c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
     if (f != INVALID_HANDLE_VALUE) {
@@ -120,6 +120,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         WriteFile(f, utf8.data(), (DWORD)utf8.size(), &written, nullptr);
         CloseHandle(f);
     }
-    MessageBoxW(nullptr, g_report.c_str(), L"Handy Viewer 3D - Check", MB_OK | MB_ICONINFORMATION);
+    MessageBoxW(nullptr, g_report.c_str(), L"Thin Place VR - Check", MB_OK | MB_ICONINFORMATION);
     return 0;
 }
