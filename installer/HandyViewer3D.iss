@@ -24,13 +24,19 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayName=Handy Viewer 3D
+UninstallDisplayIcon={app}\HandyViewer3D.exe
+; Updates run while the app is open: close it first, then reopen it at the end.
+CloseApplications=yes
+RestartApplications=no
 
 [Files]
 Source: "{#StageDir}\HandyViewer3D.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\HandyViewer3DCheck.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\HandyViewer3D.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\HandyViewer3D.exe.config"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\XR_APILAYER_SYMYOULATER_handy_viewer.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\shapes\*"; DestDir: "{app}\shapes"; Flags: ignoreversion
-Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
+Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
 ; Created now so you can see it exists; the log appears here once a game has loaded the layer.
@@ -44,5 +50,13 @@ Root: HKLM64; Subkey: "SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit"; ValueType:
   ValueName: "{app}\XR_APILAYER_SYMYOULATER_handy_viewer.json"; ValueData: 0; Flags: uninsdeletevalue
 
 [Icons]
+Name: "{autoprograms}\Handy Viewer 3D"; Filename: "{app}\HandyViewer3D.exe"
+Name: "{autodesktop}\Handy Viewer 3D"; Filename: "{app}\HandyViewer3D.exe"
 Name: "{autoprograms}\Handy Viewer 3D Check"; Filename: "{app}\HandyViewer3DCheck.exe"
-Name: "{autodesktop}\Handy Viewer 3D Check"; Filename: "{app}\HandyViewer3DCheck.exe"
+
+[InstallDelete]
+; The check tool's desktop shortcut from earlier versions; the main app replaces it.
+Type: files; Name: "{autodesktop}\Handy Viewer 3D Check.lnk"
+
+[Run]
+Filename: "{app}\HandyViewer3D.exe"; Description: "Open Handy Viewer 3D"; Flags: nowait postinstall runasoriginaluser
