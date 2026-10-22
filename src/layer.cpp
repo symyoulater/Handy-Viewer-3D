@@ -30,7 +30,7 @@
 #include "mathutil.h"
 #include "steering.h"
 
-#define HV_VERSION "0.1.2"
+#define HV_VERSION "0.1.3"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_handy_viewer"
 
 namespace hv {
@@ -838,8 +838,22 @@ XrResult XRAPI_CALL Hook_xrCreateApiLayerInstance(const XrInstanceCreateInfo* in
 } // namespace
 } // namespace hv
 
+BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
+    if (reason == DLL_PROCESS_ATTACH) {
+        wchar_t exe[MAX_PATH] = {};
+        GetModuleFileNameW(nullptr, exe, MAX_PATH);
+        hv::Log("Handy Viewer 3D " HV_VERSION " loaded into %s", hv::Narrow(exe).c_str());
+    }
+    return TRUE;
+}
+
 extern "C" __declspec(dllexport) XrResult XRAPI_CALL xrNegotiateLoaderApiLayerInterface(
-    const XrNegotiateLoaderInfo* loaderInfo, const char* /*layerName*/, XrNegotiateApiLayerRequest* request) {
+    const XrNegotiateLoaderInfo* loaderInfo, const char* layerName, XrNegotiateApiLayerRequest* request) {
+    if (loaderInfo)
+        hv::Log("OpenXR loader asking for layer \"%s\" (interface %u-%u, API %u.%u-%u.%u)", layerName ? layerName : "?",
+                loaderInfo->minInterfaceVersion, loaderInfo->maxInterfaceVersion,
+                (unsigned)XR_VERSION_MAJOR(loaderInfo->minApiVersion), (unsigned)XR_VERSION_MINOR(loaderInfo->minApiVersion),
+                (unsigned)XR_VERSION_MAJOR(loaderInfo->maxApiVersion), (unsigned)XR_VERSION_MINOR(loaderInfo->maxApiVersion));
     if (!loaderInfo || !request || loaderInfo->structType != XR_LOADER_INTERFACE_STRUCT_LOADER_INFO ||
         request->structType != XR_LOADER_INTERFACE_STRUCT_API_LAYER_REQUEST)
         return XR_ERROR_INITIALIZATION_FAILED;

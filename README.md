@@ -4,7 +4,7 @@ See your real wheel, hands and Stream Deck while driving in VR.
 
 Handy Viewer 3D adds flat "windows" to any OpenXR game, filled with Virtual Desktop's chroma-key colour (magenta). Virtual Desktop replaces that colour with the Quest 3's passthrough cameras, so your real kit shows through exactly where it sits. The wheel window turns with your Simucube, so it hugs the rim at any steering angle.
 
-**Version 0.1.2** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
+**Version 0.1.3** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
 
 ---
 
@@ -81,7 +81,8 @@ Hold **Shift** as well for fine steps (1 mm or 0.25°).
 Everything lives in **Documents\Handy Viewer 3D**:
 
 - `config.json` — window positions, wheel choice, steering range (default **900°**, must match Simucube Tuner).
-- `layer.log` — what happened during the last game session. If something isn't working, this is the file to send.
+
+The log is in **C:\ProgramData\Handy Viewer 3D\layer.log** — what happened during the last game session. If something isn't working, this is the file to send.
 
 ## Uninstall
 

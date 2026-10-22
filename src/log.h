@@ -10,6 +10,9 @@ namespace hv {
 // Folder where config, log and user shapes live (created on first use).
 const std::wstring& DataDir();
 
+// Folder for layer.log (C:\ProgramData\Handy Viewer 3D).
+const std::wstring& LogDir();
+
 // Folder the layer DLL was loaded from (holds installed default shapes).
 const std::wstring& ModuleDir();
 

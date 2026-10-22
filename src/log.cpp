@@ -62,6 +62,21 @@ const std::wstring& ModuleDir() {
     return dir;
 }
 
+// The log goes in C:\ProgramData\Handy Viewer 3D: always writable by games, and not affected by
+// OneDrive folder redirection or Windows "controlled folder access" on Documents.
+const std::wstring& LogDir() {
+    // Kernel32 only, so it is safe to call while the DLL is being loaded.
+    static std::wstring dir = [] {
+        wchar_t base[MAX_PATH] = {};
+        DWORD n = GetEnvironmentVariableW(L"ProgramData", base, MAX_PATH);
+        std::wstring d = (n > 0 && n < MAX_PATH) ? std::wstring(base) : std::wstring(L"C:\\ProgramData");
+        d += L"\\Handy Viewer 3D";
+        CreateDirectoryW(d.c_str(), nullptr);
+        return d;
+    }();
+    return dir;
+}
+
 void Log(const char* fmt, ...) {
     char msg[2048];
     va_list args;
@@ -73,7 +88,7 @@ void Log(const char* fmt, ...) {
     GetLocalTime(&t);
 
     std::lock_guard<std::mutex> lock(g_logMutex);
-    std::wstring path = DataDir() + L"\\layer.log";
+    std::wstring path = LogDir() + L"\\layer.log";
     // Start a fresh log for each game launch so it stays short and readable.
     FILE* f = _wfopen(path.c_str(), g_logStarted ? L"a" : L"w");
     g_logStarted = true;

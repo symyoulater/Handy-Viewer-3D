@@ -34,6 +34,8 @@ Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 [Dirs]
 ; Created now so you can see it exists; the log appears here once a game has loaded the layer.
 Name: "{userdocs}\Handy Viewer 3D"
+; Log folder: games must be able to write here without admin rights.
+Name: "{commonappdata}\Handy Viewer 3D"; Permissions: users-modify
 
 [Registry]
 ; Implicit layer: value name is the manifest path, value 0 means enabled.
