@@ -30,7 +30,7 @@
 #include "mathutil.h"
 #include "steering.h"
 
-#define HV_VERSION "0.3.0"
+#define HV_VERSION "0.3.1"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -71,6 +71,7 @@ struct Window {
     std::vector<ID3D11Texture2D*> d3d11Images;
     std::vector<ID3D12Resource*> d3d12Images;
     std::vector<uint8_t> pixels; // RGBA or BGRA depending on swapchain format
+    float marginMm = 0.0f;       // extra see-through space around the outline
     bool highlighted = false;
     bool needsUpload = true;
     bool failed = false;
@@ -182,8 +183,9 @@ void Rasterise(Window& w) {
         maxX = std::max(maxX, std::fabs(p.first));
         maxY = std::max(maxY, std::fabs(p.second));
     }
-    w.halfWmm = maxX + border;
-    w.halfHmm = maxY + border;
+    const float margin = std::max(0.0f, w.marginMm);
+    w.halfWmm = maxX + margin + border;
+    w.halfHmm = maxY + margin + border;
 
     const float pxPerMm = std::min(3.0f, 1024.0f / (2.0f * std::max(w.halfWmm, w.halfHmm)));
     int texW = std::max(16, (int)std::ceil(2.0f * w.halfWmm * pxPerMm));
@@ -201,9 +203,13 @@ void Rasterise(Window& w) {
         for (int col = 0; col < texW; ++col) {
             float x = -w.halfWmm + (col + 0.5f) * (2.0f * w.halfWmm / texW);
             uint8_t r = 0, gg = 0, b = 0, a = 0;
-            if (w.highlighted && DistanceToEdges(w.shape.points, x, y) < 2.5f) {
-                r = 255; gg = 220; b = 0; a = 255; // selection outline
-            } else if (PointInPolygon(w.shape.points, x, y)) {
+            bool insideShape = PointInPolygon(w.shape.points, x, y);
+            float edge = insideShape ? 0.0f : DistanceToEdges(w.shape.points, x, y);
+            bool inside = insideShape || edge <= margin;
+            if (w.highlighted && ((margin > 0 && !insideShape && std::fabs(edge - margin) < 2.5f) ||
+                                  (margin <= 0 && DistanceToEdges(w.shape.points, x, y) < 2.5f))) {
+                r = 255; gg = 220; b = 0; a = 255; // selection outline, at the window's outer edge
+            } else if (inside) {
                 r = kr; gg = kg; b = kb; a = 255;
             }
             uint8_t* px = &w.pixels[((size_t)row * texW + col) * 4];
@@ -222,11 +228,13 @@ void RebuildWindows() {
     g.wheel = Window{};
     if (wp) {
         g.wheel.label = wp->name;
-        g.wheel.shape = LoadShape(wp->shapeFile, wp->padded);
+        g.wheel.shape = LoadShape(wp->shapeFile);
+        float sc = std::clamp(wp->scale, 0.5f, 2.0f);
         for (auto& p : g.wheel.shape.points) {
-            p.first -= wp->hubOffsetMm[0];
-            p.second -= wp->hubOffsetMm[1];
+            p.first = (p.first - wp->hubOffsetMm[0]) * sc;
+            p.second = (p.second - wp->hubOffsetMm[1]) * sc;
         }
+        g.wheel.marginMm = g.cfg.wheelMarginMm;
     }
     for (auto& r : g.rects) DestroyWindowResources(r);
     g.rects.clear();
@@ -444,9 +452,11 @@ bool PlaceSelectedInFront(XrTime displayTime) {
         !(loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) ||
         !(loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT))
         return false;
-    XrVector3f fwd = QuatRotate(loc.pose.orientation, {0, 0, -g.cfg.placeDistanceM});
+    // People look down at a wheel mostly with their eyes, so aim a little below where the head points.
+    XrQuaternionf aim = QuatMul(loc.pose.orientation, QuatAxisAngle(1, 0, 0, Deg2Rad(-g.cfg.placeAimDownDeg)));
+    XrVector3f fwd = QuatRotate(aim, {0, 0, -g.cfg.placeDistanceM});
     p->position = {loc.pose.position.x + fwd.x, loc.pose.position.y + fwd.y, loc.pose.position.z + fwd.z};
-    ForwardYawPitch(loc.pose.orientation, p->yaw, p->pitch);
+    ForwardYawPitch(aim, p->yaw, p->pitch);
     p->roll = 0;
     if (g.selected == 0) g.cfg.wheelPlaced = true;
     Log("Placed %s in front of you", SelectedName());
@@ -534,7 +544,15 @@ void HandleHotkeys(XrTime displayTime) {
             case Action::RollRight: p->roll -= deg; break;
             case Action::Bigger:
             case Action::Smaller: {
-                if (g.selected == 0) break; // wheel shapes keep their real size
+                if (g.selected == 0) {
+                    WheelProfile* wp = ActiveWheel();
+                    if (!wp) break;
+                    float step = (fine ? 0.005f : 0.02f) * (actions[i] == Action::Bigger ? 1.0f : -1.0f);
+                    wp->scale = std::clamp(wp->scale + step, 0.5f, 2.0f);
+                    Log("Wheel window size %.0f%%", wp->scale * 100.0f);
+                    RebuildWindows();
+                    break;
+                }
                 RectWindow& rw = g.cfg.windows[g.selected - 1];
                 float d = (actions[i] == Action::Bigger ? 1.0f : -1.0f) * (fine ? 1.0f : g.cfg.nudgeMm);
                 rw.widthMm = std::max(20.0f, rw.widthMm + d);

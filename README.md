@@ -6,7 +6,7 @@
 
 Thin Place VR adds flat "windows" to any OpenXR game, filled with Virtual Desktop's chroma-key colour (magenta). Virtual Desktop replaces that colour with the Quest 3's passthrough cameras, so your real kit shows through exactly where it sits. The wheel window turns with your Simucube, so it hugs the rim at any steering angle.
 
-**Version 0.3.0** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
+**Version 0.3.1** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
 
 ---
 
@@ -52,7 +52,7 @@ Placing windows is still done in the headset (edit mode, below), because it need
 2. After a few seconds a window appears straight ahead of you, outlined in yellow, showing your real surroundings. That confirms it's working.
 3. Press **Ctrl+Alt+H** to switch on **edit mode**. While it's on, the adjustment keys below go to Thin Place VR instead of the game; every other key works as normal.
 4. Fit the rim you're using (the **Conspit 300GT** is selected to begin with; **W** swaps to the **310 APEX**).
-5. Hold the wheel straight, sit in your driving position, look at the centre of the wheel and press **P**. The wheel window jumps to where you're looking, 60 cm in front of you.
+5. Hold the wheel straight, sit in your driving position, point your nose at the centre of the wheel and press **P**. The wheel window jumps there (aiming slightly below where your head points, since eyes look lower). Set how far away it lands in the app.
 6. Nudge it with the keys below until the real rim fills it.
 7. With the wheel dead straight, press **X** to set the centre.
 8. Turn the wheel. If the window turns the wrong way, press **I**.
@@ -86,7 +86,7 @@ In **edit mode** (selected window has a yellow outline):
 | T / G | Tilt top away / towards you |
 | Q / E | Turn left / right |
 | Z / C | Roll left / right |
-| = / − | Stream Deck window bigger / smaller |
+| = / − | Selected window bigger / smaller |
 | Esc | Leave edit mode |
 
 Hold **Shift** as well for fine steps (1 mm or 0.25°).

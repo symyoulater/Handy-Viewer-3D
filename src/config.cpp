@@ -78,6 +78,8 @@ bool SaveConfig(const Config& c) {
     j["enabled"] = c.enabled;
     j["key_colour_rgb"] = {c.keyColour[0], c.keyColour[1], c.keyColour[2]};
     j["place_distance_m"] = c.placeDistanceM;
+    j["place_aim_down_deg"] = c.placeAimDownDeg;
+    j["wheel_margin_mm"] = c.wheelMarginMm;
     j["wheel_placed"] = c.wheelPlaced;
     j["nudge_mm"] = c.nudgeMm;
     j["nudge_deg"] = c.nudgeDeg;
@@ -91,7 +93,7 @@ bool SaveConfig(const Config& c) {
         wheels.push_back({{"id", w.id},
                           {"name", w.name},
                           {"shape_file", w.shapeFile},
-                          {"padded", w.padded},
+                          {"scale", w.scale},
                           {"rotates", w.rotates},
                           {"hub_offset_mm", {w.hubOffsetMm[0], w.hubOffsetMm[1]}},
                           {"pose", PoseToJson(w.pose)}});
@@ -141,6 +143,8 @@ bool LoadConfig(Config& c) {
         if (j.contains("key_colour_rgb") && j["key_colour_rgb"].size() == 3)
             for (int i = 0; i < 3; ++i) c.keyColour[i] = j["key_colour_rgb"][i].get<int>();
         c.placeDistanceM = j.value("place_distance_m", d.placeDistanceM);
+        c.placeAimDownDeg = j.value("place_aim_down_deg", d.placeAimDownDeg);
+        c.wheelMarginMm = j.value("wheel_margin_mm", d.wheelMarginMm);
         c.wheelPlaced = j.value("wheel_placed", d.wheelPlaced);
         c.nudgeMm = j.value("nudge_mm", d.nudgeMm);
         c.nudgeDeg = j.value("nudge_deg", d.nudgeDeg);
@@ -159,7 +163,7 @@ bool LoadConfig(Config& c) {
                 p.id = w.value("id", std::string("wheel"));
                 p.name = w.value("name", p.id);
                 p.shapeFile = w.value("shape_file", std::string());
-                p.padded = w.value("padded", true);
+                p.scale = w.value("scale", 1.0f);
                 p.rotates = w.value("rotates", true);
                 if (w.contains("hub_offset_mm") && w["hub_offset_mm"].size() == 2) {
                     p.hubOffsetMm[0] = w["hub_offset_mm"][0].get<float>();
@@ -194,7 +198,7 @@ long long ConfigFileStamp() {
     return (static_cast<long long>(a.ftLastWriteTime.dwHighDateTime) << 32) | a.ftLastWriteTime.dwLowDateTime;
 }
 
-Shape LoadShape(const std::string& file, bool padded) {
+Shape LoadShape(const std::string& file) {
     Shape s;
     // User shapes first, then the defaults installed next to the DLL.
     std::wstring candidates[] = {DataDir() + L"\\shapes\\" + Widen(file),
@@ -204,8 +208,7 @@ Shape LoadShape(const std::string& file, bool padded) {
         if (!ReadFile(path, text)) continue;
         try {
             json j = json::parse(text);
-            const char* key = padded && j.contains("outline_padded_12mm") ? "outline_padded_12mm" : "outline_mm";
-            for (const auto& p : j[key]) s.points.emplace_back(p[0].get<float>(), p[1].get<float>());
+            for (const auto& p : j["outline_mm"]) s.points.emplace_back(p[0].get<float>(), p[1].get<float>());
             Log("Loaded shape %s (%zu points)", Narrow(path).c_str(), s.points.size());
             return s;
         } catch (const std::exception& e) {

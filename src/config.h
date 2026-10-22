@@ -26,7 +26,7 @@ struct WheelProfile {
     std::string id;
     std::string name;
     std::string shapeFile;           // file in the shapes folder
-    bool padded = true;              // use the outline with the finger margin
+    float scale = 1.0f;              // size adjustment (1.0 = real size)
     bool rotates = true;             // follow the steering angle
     std::array<float, 2> hubOffsetMm{0.0f, 0.0f}; // where the hub sits within the shape
     Pose pose;
@@ -44,6 +44,8 @@ struct Config {
     bool enabled = true;
     std::array<int, 3> keyColour{255, 0, 255}; // must match Virtual Desktop's chroma key colour
     float placeDistanceM = 0.6f;
+    float placeAimDownDeg = 10.0f;  // P aims this far below where the head points (eyes look lower)
+    float wheelMarginMm = 25.0f;    // extra space around the rim for hands
     bool wheelPlaced = false; // false until the wheel window has been placed once
     float nudgeMm = 5.0f;
     float nudgeDeg = 1.0f;
@@ -64,6 +66,6 @@ bool LoadConfig(Config& out);      // creates the file with defaults if missing
 bool SaveConfig(const Config& cfg);
 long long ConfigFileStamp();       // last-write time, for live reloading
 
-Shape LoadShape(const std::string& file, bool padded);
+Shape LoadShape(const std::string& file);
 
 } // namespace hv

@@ -31,7 +31,7 @@ namespace ThinPlaceVR
         private Label _statusLayer, _statusLast, _statusWheel, _noConfig;
         private CheckBox _showWindows, _invert, _deckShow;
         private ComboBox _rim;
-        private NumericUpDown _range, _deckW, _deckH, _nudgeMm, _nudgeDeg;
+        private NumericUpDown _range, _deckW, _deckH, _nudgeMm, _nudgeDeg, _margin, _scale, _distance;
         private Panel _swatch;
         private Label _swatchText;
         private Button _updateBtn;
@@ -126,6 +126,10 @@ namespace ThinPlaceVR
             _range = Num(90, 3600, 1, 0);
             Row(wheel, "Steering range (°) — match Simucube Tuner", _range);
             _invert = Check(wheel, "Window turns the opposite way to the wheel (flip)");
+            _margin = Num(0, 150, 5, 0);
+            Row(wheel, "Extra space around the rim for hands (mm)", _margin);
+            _scale = Num(50, 200, 1, 0);
+            Row(wheel, "Window size (% of the real rim)", _scale);
             var resetCentre = SmallButton("Reset steering centre");
             resetCentre.Click += (s, e) => ResetCentre();
             Row(wheel, "", resetCentre);
@@ -153,11 +157,13 @@ namespace ThinPlaceVR
             stack.Controls.Add(colour);
 
             // Steps
-            var steps = Card("Edit mode step sizes");
+            var steps = Card("Edit mode");
             _nudgeMm = Num(1, 50, 1, 0);
             Row(steps, "Move step (mm)", _nudgeMm);
             _nudgeDeg = Num(0.25m, 10, 0.25m, 2);
             Row(steps, "Turn step (°)", _nudgeDeg);
+            _distance = Num(20, 150, 1, 0);
+            Row(steps, "P places windows this far away (cm)", _distance);
             Hint(steps, "Hold Shift in edit mode for 1 mm / 0.25° steps.");
             stack.Controls.Add(steps);
 
@@ -167,7 +173,7 @@ namespace ThinPlaceVR
                 "Ctrl+Alt+H  edit mode on/off      Ctrl+Alt+V  windows on/off\n" +
                 "In edit mode:  P place where you look · Tab next window · W swap rim\n" +
                 "X set centre · I flip direction · Arrows move · R/F away/closer\n" +
-                "T/G tilt · Q/E turn · Z/C roll · =/− Stream Deck size · Esc finish");
+                "T/G tilt · Q/E turn · Z/C roll · =/− bigger/smaller · Esc finish");
             stack.Controls.Add(keys);
 
             // Tools + updates
@@ -200,7 +206,7 @@ namespace ThinPlaceVR
             _invert.CheckedChanged += changed;
             _deckShow.CheckedChanged += changed;
             _rim.SelectedIndexChanged += changed;
-            foreach (var n in new[] { _range, _deckW, _deckH, _nudgeMm, _nudgeDeg }) n.ValueChanged += changed;
+            foreach (var n in new[] { _range, _deckW, _deckH, _nudgeMm, _nudgeDeg, _margin, _scale, _distance }) n.ValueChanged += changed;
         }
 
         private FlowLayoutPanel Card(string title)
@@ -305,6 +311,10 @@ namespace ThinPlaceVR
                 _deckW.Value = Clamp(_deckW, ConfigStore.Num(deck, "width_mm", 130));
                 _deckH.Value = Clamp(_deckH, ConfigStore.Num(deck, "height_mm", 95));
 
+                _margin.Value = Clamp(_margin, ConfigStore.Num(cfg, "wheel_margin_mm", 25));
+                _distance.Value = Clamp(_distance, ConfigStore.Num(cfg, "place_distance_m", 0.6) * 100.0);
+                var activeWheel = ActiveWheelObj(cfg);
+                _scale.Value = Clamp(_scale, ConfigStore.Num(activeWheel, "scale", 1.0) * 100.0);
                 _nudgeMm.Value = Clamp(_nudgeMm, ConfigStore.Num(cfg, "nudge_mm", 5));
                 _nudgeDeg.Value = Clamp(_nudgeDeg, ConfigStore.Num(cfg, "nudge_deg", 1));
 
@@ -319,13 +329,21 @@ namespace ThinPlaceVR
         private void Save()
         {
             _ignoreWatcherUntil = DateTime.Now.AddSeconds(1);
+            bool rimChanged = false;
             bool ok = ConfigStore.Update(cfg =>
             {
+                // Size belongs to the rim that was showing; write it before switching rims.
+                var shownWheel = ActiveWheelObj(cfg);
+                if (shownWheel != null) shownWheel["scale"] = (double)_scale.Value / 100.0;
                 cfg["enabled"] = _showWindows.Checked;
                 var steering = ConfigStore.Obj(cfg, "steering");
                 steering["range_deg"] = (double)_range.Value;
                 steering["invert"] = _invert.Checked;
-                if (_rim.SelectedItem is RimItem rim) cfg["active_wheel"] = rim.Id;
+                if (_rim.SelectedItem is RimItem rim && rim.Id != ConfigStore.Str(cfg, "active_wheel", ""))
+                {
+                    cfg["active_wheel"] = rim.Id;
+                    rimChanged = true;
+                }
                 var deck = DeckWindow(cfg);
                 if (deck != null)
                 {
@@ -333,10 +351,13 @@ namespace ThinPlaceVR
                     deck["width_mm"] = (double)_deckW.Value;
                     deck["height_mm"] = (double)_deckH.Value;
                 }
+                cfg["wheel_margin_mm"] = (double)_margin.Value;
+                cfg["place_distance_m"] = (double)_distance.Value / 100.0;
                 cfg["nudge_mm"] = (double)_nudgeMm.Value;
                 cfg["nudge_deg"] = (double)_nudgeDeg.Value;
             });
             if (!ok) MessageBox.Show(this, "Couldn't save the settings. Try again in a moment.", Text);
+            else if (rimChanged) LoadSettings(); // show the newly chosen rim's own size
         }
 
         private void ResetCentre()
@@ -374,6 +395,13 @@ namespace ThinPlaceVR
                 try { return Color.FromArgb(Convert.ToInt32(l[0]), Convert.ToInt32(l[1]), Convert.ToInt32(l[2])); } catch { }
             }
             return Color.FromArgb(255, 0, 255);
+        }
+
+        private static Dictionary<string, object> ActiveWheelObj(Dictionary<string, object> cfg)
+        {
+            string active = ConfigStore.Str(cfg, "active_wheel", "");
+            var wheels = ConfigStore.List(cfg, "wheels").OfType<Dictionary<string, object>>().ToList();
+            return wheels.FirstOrDefault(w => ConfigStore.Str(w, "id", "") == active) ?? wheels.FirstOrDefault();
         }
 
         private static Dictionary<string, object> DeckWindow(Dictionary<string, object> cfg)
