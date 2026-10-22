@@ -16,9 +16,10 @@ On the PC, in the **Virtual Desktop Streamer** app:
 - Set the OpenXR runtime to **VDXR** (not SteamVR).
 
 In the headset, open Virtual Desktop's menu → **Streaming** tab:
-- Turn on **VR Passthrough** with chroma keying.
-- Set the key colour to **R 255, G 0, B 255** (magenta).
-- Keep similarity and smoothness low, so only the windows turn into passthrough.
+- Set the frame rate to **90 fps or lower** — the passthrough options can't be ticked above that.
+- In the passthrough section, tick **Environment**. Leave **Tracked keyboard**, **Hands** and **Desk portal** off.
+- Press **Configure** next to the tickboxes and set the chroma key colour to **Red 255, Green 0, Blue 255** (magenta).
+- Start with **Similarity 4%**, **Smoothness 10%**, **Opacity 100%**, so only the windows turn into passthrough.
 
 ### 2. Install
 
