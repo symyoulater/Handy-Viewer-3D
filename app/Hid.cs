@@ -46,17 +46,16 @@ namespace ThinPlaceVR
             public byte ReportId;
             public int LogicalMin, LogicalMax, BitSize;
 
+            public string Caps = ""; // a summary of the base's inputs, for the log
+
             private volatile bool _streaming;
             public volatile bool Failed; // the device stopped answering (unplugged)
             private double? _latest;
-            private DateTime _latestAt = DateTime.MinValue;
-            private bool _askFailed;
             private SafeFileHandle _streamHandle;
 
-            // Steering from -1 (left) to +1 (right), or null if it couldn't be read.
-            // The base's own report stream is read all the time (on a separate handle, so it never blocks
-            // anything else). Until the stream has delivered something, the base is asked for its position;
-            // bases that don't answer, or answer with something we can't read, rely on the stream alone.
+            // Steering from -1 (left) to +1 (right), or null if nothing has been read yet.
+            // The base's report stream is read on a separate connection; this returns the latest position.
+            // (Bases aren't asked for their position: some, like the Simucube 2, stall for seconds when asked.)
             public double? ReadSteering()
             {
                 if (Handle == null || Handle.IsInvalid || ReportLength <= 0) return null;
@@ -66,46 +65,56 @@ namespace ThinPlaceVR
                     var t = new Thread(Stream) { IsBackground = true, Name = "HID reader" };
                     t.Start();
                 }
-                if (_latest.HasValue && (DateTime.UtcNow - _latestAt).TotalSeconds < 2) return _latest;
-                if (!_askFailed)
-                {
-                    var report = new byte[ReportLength];
-                    report[0] = ReportId;
-                    double? v = null;
-                    if (HidD_GetInputReport(Handle, report, report.Length)) v = Decode(report);
-                    if (v != null) return v;
-                    _askFailed = true;
-                    Updater.Log("Wheel base \"" + Name + "\" doesn't answer position requests; reading its report stream instead");
-                }
-                return _latest; // last known position (bases only send when something changes)
+                return _latest;
             }
 
             private void Stream()
             {
+                var counts = new SortedDictionary<int, int>();
+                int withSteering = 0, total = 0, zeroReads = 0;
+                bool summarised = false;
+                var started = DateTime.UtcNow;
                 try
                 {
                     _streamHandle = CreateFile(Path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
                     if (_streamHandle.IsInvalid)
                     {
-                        Updater.Log("Couldn't open a second connection to \"" + Name + "\" (error " + Marshal.GetLastWin32Error() + ")");
-                        return; // asking for the position still works, if the base answers
+                        Updater.Log("Couldn't open a reading connection to \"" + Name + "\" (error " + Marshal.GetLastWin32Error() + ")");
+                        Failed = true;
+                        return;
                     }
                     using (var fs = new FileStream(_streamHandle, FileAccess.Read, ReportLength, false))
                     {
                         var buf = new byte[ReportLength];
-                        int count = 0;
-                        while (fs.Read(buf, 0, buf.Length) > 0)
+                        while (true)
                         {
+                            int n = fs.Read(buf, 0, buf.Length);
+                            if (n <= 0)
+                            {
+                                // Windows reported "end of data" - not normal for a HID device; give it a moment.
+                                if (++zeroReads > 50) throw new IOException("the base stopped sending");
+                                Thread.Sleep(20);
+                                continue;
+                            }
+                            zeroReads = 0;
+                            total++;
+                            counts[buf[0]] = counts.TryGetValue(buf[0], out int c) ? c + 1 : 1;
                             var v = Decode(buf);
-                            if (v != null) { _latest = v; _latestAt = DateTime.UtcNow; }
-                            if (++count == 1)
-                                Updater.Log("Reading \"" + Name + "\": first report id " + buf[0] + ", " + (v == null ? "no steering value in it" : "steering " + v.Value.ToString("0.000")));
+                            if (v != null) { _latest = v; withSteering++; }
+                            if (!summarised && (DateTime.UtcNow - started).TotalSeconds >= 3)
+                            {
+                                summarised = true;
+                                Updater.Log("Reading \"" + Name + "\": " + total + " reports in 3 s (" +
+                                    string.Join(", ", counts.Select(kv => "id " + kv.Key + " x" + kv.Value)) + "); steering in " + withSteering +
+                                    (_latest.HasValue ? ", now " + _latest.Value.ToString("0.000") : ""));
+                            }
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    if (Handle != null && !Handle.IsClosed) Updater.Log("Stopped reading \"" + Name + "\": " + ex.Message);
+                    if (Handle != null && !Handle.IsClosed)
+                        Updater.Log("Stopped reading \"" + Name + "\" after " + total + " reports: " + ex.Message);
                 }
                 _latest = null;
                 if (Handle != null && !Handle.IsClosed) Failed = true;
@@ -191,20 +200,26 @@ namespace ThinPlaceVR
                 var vc = new byte[size * valueCaps];
                 ushort n = valueCaps;
                 if (HidP_GetValueCaps(0, vc, ref n, d.Preparsed) != HIDP_STATUS_SUCCESS) { d.Dispose(); return null; }
+                var parts = new List<string>();
+                bool found = false;
                 for (int k = 0; k < n; k++)
                 {
                     int o = k * size;
                     ushort page = BitConverter.ToUInt16(vc, o);
                     bool isRange = vc[o + 12] != 0;
                     ushort u0 = BitConverter.ToUInt16(vc, o + 56), u1 = BitConverter.ToUInt16(vc, o + 58);
+                    parts.Add("id " + vc[o + 2] + " " + page.ToString("X2") + ":" + u0.ToString("X2") + (isRange ? "-" + u1.ToString("X2") : "") +
+                        " " + BitConverter.ToUInt16(vc, o + 18) + "bit");
                     bool hasX = page == 0x01 && (isRange ? u0 <= 0x30 && u1 >= 0x30 : u0 == 0x30);
-                    if (!hasX) continue;
+                    if (!hasX || found) continue;
+                    found = true;
                     d.ReportId = vc[o + 2];
                     d.BitSize = BitConverter.ToUInt16(vc, o + 18);
                     d.LogicalMin = BitConverter.ToInt32(vc, o + 40);
                     d.LogicalMax = BitConverter.ToInt32(vc, o + 44);
-                    return d;
                 }
+                d.Caps = "collection " + usagePage.ToString("X2") + ":" + usage.ToString("X2") + ", inputs: " + string.Join("; ", parts);
+                if (found) return d;
             }
             catch { }
             d.Dispose();
@@ -339,7 +354,7 @@ namespace ThinPlaceVR
                     nextSearch = DateTime.UtcNow.AddSeconds(2);
                     lock (_lock) { _name = dev?.Name ?? ""; _value = null; }
                     if (dev == null) continue;
-                    Updater.Log("Wheel base connected: \"" + dev.Name + "\" (report " + dev.ReportId + ", " + dev.ReportLength + " bytes, " + dev.BitSize + "-bit steering " + dev.LogicalMin + " to " + dev.LogicalMax + ")");
+                    Updater.Log("Wheel base connected: \"" + dev.Name + "\" (report " + dev.ReportId + ", " + dev.ReportLength + " bytes, " + dev.BitSize + "-bit steering " + dev.LogicalMin + " to " + dev.LogicalMax + "); " + dev.Caps);
                 }
                 double? v = null;
                 try { v = dev.ReadSteering(); } catch { }
