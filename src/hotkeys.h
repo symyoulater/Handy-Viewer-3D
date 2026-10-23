@@ -32,6 +32,7 @@ enum class Action : int {
     BringBoard = 27,     // B: move the setup panel back in front of you
     PanelUp = 28,        // [: scroll the selected panel up
     PanelDown = 29,      // ]: scroll the selected panel down
+    ShiftAll = 30,       // A: move every window together so the wheel window is where you're looking
 };
 
 void StartHotkeys();

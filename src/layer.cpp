@@ -37,7 +37,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.11.1"
+#define HV_VERSION "0.11.2"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -736,6 +736,41 @@ bool PlaceSelectedInFront(XrTime displayTime) {
     return true;
 }
 
+// After the headset has slept or been recentred its idea of the room moves, and every window with it.
+// This moves the whole layout as one piece - turning it and sliding it - so the wheel window lands
+// where you're looking and everything else keeps its place around it.
+bool ShiftAllToView(XrTime displayTime) {
+    WheelProfile* wp = ActiveWheel();
+    if (!wp) return false;
+    XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
+    if (XR_FAILED(next.LocateSpace(g.viewSpace, g.baseSpace, displayTime, &loc)) ||
+        !(loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) ||
+        !(loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT))
+        return false;
+    XrQuaternionf aim = QuatMul(loc.pose.orientation, QuatAxisAngle(1, 0, 0, Deg2Rad(-g.cfg.placeAimDownDeg)));
+    XrVector3f fwd = QuatRotate(aim, {0, 0, -g.cfg.placeDistanceM});
+    XrVector3f target{loc.pose.position.x + fwd.x, loc.pose.position.y + fwd.y, loc.pose.position.z + fwd.z};
+    float headYaw = 0, headPitch = 0;
+    ForwardYawPitch(aim, headYaw, headPitch);
+    const float turn = headYaw - wp->pose.yaw;
+    const XrQuaternionf rot = QuatFromYawPitchRoll(turn, 0, 0);
+    const std::array<float, 3> pivot = wp->pose.position;
+    auto move = [&](Pose& p) {
+        XrVector3f rel{p.position[0] - pivot[0], p.position[1] - pivot[1], p.position[2] - pivot[2]};
+        XrVector3f r = QuatRotate(rot, rel);
+        p.position = {target.x + r.x, target.y + r.y, target.z + r.z};
+        p.yaw += turn;
+    };
+    for (auto& w : g.cfg.wheels) move(w.pose);
+    for (auto& w : g.cfg.windows) move(w.pose);
+    g.cfg.wheelPlaced = true;
+    Log("Moved all windows together (turned %.0f degrees)", turn);
+    g.selected = 0;
+    Highlight();
+    MarkChanged();
+    return true;
+}
+
 // New windows (added in the app) appear in front of you, side by side, instead of wherever their
 // default position happens to be in this game's space.
 void PlaceNewWindows(XrTime displayTime) {
@@ -857,6 +892,9 @@ void DoAction(Action action, bool fine, XrTime displayTime) {
             }
             break;
         }
+        case Action::ShiftAll:
+            ShiftAllToView(displayTime);
+            break;
         case Action::BringBoard:
             g.boardBring = true;
             if (!g.boardShowing) { g.boardManual = true; g.boardHiddenInEdit = false; }
@@ -1121,7 +1159,7 @@ void RenderBoard(Window& w, const XrSpaceLocation* head) {
         {L"O", L"window on / off"},       {L"S", L"change shape"},
         {L"W", L"next rim"},              {L"X", L"centre steering"},
         {L"I", L"flip steering"},         {L"B", L"bring this panel"},
-        {L"[  ]", L"scroll a panel"},
+        {L"[  ]", L"scroll a panel"},     {L"A", L"move all windows here"},
     };
     const int colW = (W - 56) / 2;
     for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i) {

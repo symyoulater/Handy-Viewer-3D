@@ -9,7 +9,7 @@
     ToggleAll: 3, Place: 5, Centre: 7, Invert: 8,
     Left: 9, Right: 10, Up: 11, Down: 12, Away: 13, Closer: 14,
     TiltUp: 15, TiltDown: 16, TurnLeft: 17, TurnRight: 18, RollLeft: 19, RollRight: 20,
-    Bigger: 21, Smaller: 22, Select: 23,
+    Bigger: 21, Smaller: 22, Select: 23, ShiftAll: 30,
   };
 
   const S = { state: null, live: { running: false }, page: 'home', tab: 0, fine: false, key: '' };
@@ -210,6 +210,7 @@
             <div class="top"><h2 id="pos-h">Position</h2>
               <div class="seg" role="group" aria-label="Step size"><button data-act="fine" data-f="1" class="${S.fine ? 'on' : ''}">Fine</button><button data-act="fine" data-f="0" class="${S.fine ? '' : 'on'}">Normal</button></div></div>
             <button class="btn primary" data-act="do" data-a="${A.Place}">Place where I'm looking</button>
+            <button class="btn" data-act="do" data-a="${A.ShiftAll}" title="After the headset has slept or been recentred: look at your wheel and press this">Move all windows together (look at the wheel)</button>
             <div class="pad">
               <button class="small" data-act="do" data-a="${A.Closer}">Closer</button>
               <button data-act="do" data-a="${A.Up}" aria-label="Move up">↑</button>
