@@ -333,6 +333,8 @@ namespace ThinPlaceVR
 
                 case "page":
                     _wheel.Active = ConfigStore.Str(a, "page", "") == "wheel";
+                    // Smooth updates (30 a second) while the live angle is on screen; otherwise a few a second.
+                    _liveTimer.Interval = _wheel.Active ? 33 : 150;
                     return null;
 
                 case "set":

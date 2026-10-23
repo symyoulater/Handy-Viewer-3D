@@ -419,7 +419,7 @@ namespace ThinPlaceVR
                     continue;
                 }
                 lock (_lock) _value = v ?? _value;
-                Thread.Sleep(50);
+                Thread.Sleep(10);
             }
             dev?.Dispose();
         }
