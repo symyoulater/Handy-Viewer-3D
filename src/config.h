@@ -46,6 +46,7 @@ struct RectWindow {
     std::string source;       // window, web, pdf, camera (for the app; the layer only needs the id)
     std::string sourceTarget; // window title, address or file
     std::string sourceId;
+    bool placed = true;       // false for a new window: it's put in front of you the next time you're in VR
     Pose pose;
 };
 

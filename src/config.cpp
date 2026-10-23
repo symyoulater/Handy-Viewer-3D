@@ -121,6 +121,7 @@ bool SaveConfig(const Config& c) {
                         {"source", w.source},
                         {"source_target", w.sourceTarget},
                         {"source_id", w.sourceId},
+                        {"placed", w.placed},
                         {"pose", PoseToJson(w.pose)}});
     }
     j["windows"] = wins;
@@ -221,6 +222,7 @@ bool LoadConfig(Config& c) {
                 r.source = w.value("source", std::string());
                 r.sourceTarget = w.value("source_target", std::string());
                 r.sourceId = w.value("source_id", std::string());
+                r.placed = w.value("placed", true);
                 if (r.source.empty()) r.sourceId.clear();
                 if (w.contains("pose")) PoseFromJson(w["pose"], r.pose);
                 c.windows.push_back(r);

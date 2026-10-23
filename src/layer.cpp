@@ -37,7 +37,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.11.0"
+#define HV_VERSION "0.11.1"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -734,6 +734,36 @@ bool PlaceSelectedInFront(XrTime displayTime) {
     Highlight();
     MarkChanged();
     return true;
+}
+
+// New windows (added in the app) appear in front of you, side by side, instead of wherever their
+// default position happens to be in this game's space.
+void PlaceNewWindows(XrTime displayTime) {
+    bool any = false;
+    for (auto& rw : g.cfg.windows) any |= !rw.placed;
+    if (!any) return;
+    XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
+    if (XR_FAILED(next.LocateSpace(g.viewSpace, g.baseSpace, displayTime, &loc)) ||
+        !(loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) ||
+        !(loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT))
+        return;
+    float yaw = 0, pitch = 0;
+    ForwardYawPitch(loc.pose.orientation, yaw, pitch);
+    XrQuaternionf flat = QuatFromYawPitchRoll(yaw, 0, 0);
+    int n = 0;
+    for (auto& rw : g.cfg.windows) {
+        if (rw.placed) continue;
+        // 60 cm ahead, a little below eye level, fanned out to the right.
+        XrVector3f off = QuatRotate(flat, {0.12f + 0.28f * n, -0.18f, -0.6f});
+        rw.pose.position = {loc.pose.position.x + off.x, loc.pose.position.y + off.y, loc.pose.position.z + off.z};
+        rw.pose.yaw = yaw - 12.0f * (n + 1);
+        rw.pose.pitch = -15.0f;
+        rw.pose.roll = 0;
+        rw.placed = true;
+        Log("New window %s placed in front of you", rw.name.c_str());
+        ++n;
+    }
+    MarkChanged();
 }
 
 // True while someone is adjusting windows: keyboard edit mode, or a hotkey / app button in the
@@ -1454,6 +1484,8 @@ XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* inf
             if (PlaceSelectedInFront(info->displayTime)) Log("First run - wheel window placed automatically");
             else g.framesSinceStart = 0;
         }
+        static int framesRun = 0;
+        if (++framesRun > 200) PlaceNewWindows(info->displayTime); // after a few seconds, once you've settled
         HandleHotkeys(info->displayTime);
         ProcessLink(info->displayTime);
         if (!g.gameRecorded) { RecordGame(); g.gameRecorded = true; }

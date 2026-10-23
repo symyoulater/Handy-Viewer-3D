@@ -529,6 +529,7 @@ namespace ThinPlaceVR
                             ["height_mm"] = Clamp(a.TryGetValue("height", out object h) ? h : 120, 20, 800),
                             ["enabled"] = true,
                             ["only_while_adjusting"] = ConfigStore.Bool(a, "onlyWhileAdjusting", false),
+                            ["placed"] = false, // the game puts it in front of you next time you're in VR
                             ["pose"] = new Dictionary<string, object>
                             {
                                 ["position_m"] = new ArrayList { 0.0, 0.9, -0.5 },
