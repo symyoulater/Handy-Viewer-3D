@@ -9,11 +9,20 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<nav class="side" aria-label="Main">
+<header class="titlebar" id="titlebar">
   <div class="brand">
-    <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><circle cx="11" cy="15" r="9.5" fill="none" stroke="#ECEEF2" stroke-width="1.5"/><circle cx="19" cy="15" r="9.5" fill="none" stroke="#B794F6" stroke-width="1.5"/></svg>
-    <div><div class="brand-name">Thin Place VR</div><div class="brand-sub">See your real kit in VR</div></div>
+    <img src="logo.png" width="22" height="22" alt="">
+    <span class="brand-name">Thin Place <span class="brand-vr">VR</span></span>
+    <span class="brand-sub">See your real wheel, hands and kit inside VR</span>
   </div>
+  <div class="winbtns">
+    <button data-win="min" aria-label="Minimise"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6.5h8" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <button data-win="max" aria-label="Maximise" id="maxbtn"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    <button data-win="close" class="close" aria-label="Close"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.2"/></svg></button>
+  </div>
+</header>
+<div class="shell">
+<nav class="side" aria-label="Main">
   <div class="nav" id="nav">
     <button data-page="home"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
     <button data-page="windows"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><rect x="7" y="8" width="6" height="5" rx="1"/></svg>Windows</button>
@@ -21,8 +30,13 @@
     <button data-page="passthrough"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Passthrough</button>
   </div>
   <div class="version" id="version"></div>
+  <div class="side-foot">
+    <button class="side-link" data-act-side="report"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>Send a report</button>
+    <button class="side-link" data-act-side="quit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H4"/></svg>Quit</button>
+  </div>
 </nav>
 <main id="main" tabindex="-1"></main>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
 </body>

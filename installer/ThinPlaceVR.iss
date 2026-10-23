@@ -29,6 +29,7 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayName=Thin Place VR
 UninstallDisplayIcon={app}\ThinPlaceVR.exe
+SetupIconFile=..\branding\ThinPlaceVR.ico
 ; Updates run while the app is open: close it first, then reopen it at the end.
 CloseApplications=yes
 RestartApplications=no

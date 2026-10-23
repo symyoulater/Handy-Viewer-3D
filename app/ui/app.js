@@ -39,6 +39,11 @@
     } else if (m.type === 'state') {
       S.state = m;
       refresh();
+    } else if (m.type === 'window') {
+      document.getElementById('maxbtn').setAttribute('aria-label', m.maximised ? 'Restore' : 'Maximise');
+      document.getElementById('maxbtn').innerHTML = m.maximised
+        ? '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="4" width="5.5" height="5.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M4.5 4V2.5h5v5H8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>'
+        : '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>';
     } else if (m.type === 'live') {
       S.live = m;
       patchLive();
@@ -376,6 +381,7 @@
         <section class="card" aria-labelledby="tools-h">
           <h2 id="tools-h">Troubleshooting</h2>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn primary" data-act="report">Send a report</button>
             <button class="btn" data-act="runCheck">Run a check</button>
             <button class="btn" data-act="openLog">Open log</button>
             <button class="btn" data-act="openFolder">Open settings folder</button>
@@ -595,6 +601,11 @@
       }
       case 'colour': send('pickColour'); break;
       case 'runCheck': send('runCheck'); break;
+      case 'report': {
+        const r = await send('makeReport');
+        if (r.ok && r.data) toast('Saved “' + r.data.name + '” to your desktop. Send that file to whoever is helping you.');
+        break;
+      }
       case 'openLog': send('openLog'); break;
       case 'openFolder': send('openFolder'); break;
     }
@@ -803,6 +814,31 @@
   main.addEventListener('pointerup', (e) => { if (e.target.type === 'range') delete e.target.dataset.dragging; });
   main.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.blur();
+  });
+
+  // ---- title bar: drag to move, double-click to maximise, window buttons ----
+  const bar = document.getElementById('titlebar');
+  bar.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    window.chrome.webview.postMessage({ id: 0, cmd: 'winDrag' });
+  });
+  bar.addEventListener('dblclick', (e) => { if (!e.target.closest('button')) send('winMax'); });
+  bar.querySelectorAll('[data-win]').forEach((b) => b.addEventListener('click', () => {
+    const w = b.dataset.win;
+    if (w === 'min') send('winMin');
+    if (w === 'max') send('winMax');
+    if (w === 'close') send('quit');
+  }));
+
+  // ---- sidebar: report and quit ----
+  document.querySelector('.side-foot').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-act-side]');
+    if (!b) return;
+    if (b.dataset.actSide === 'quit') send('quit');
+    if (b.dataset.actSide === 'report') {
+      const r = await send('makeReport');
+      if (r.ok && r.data) toast('Saved “' + r.data.name + '” to your desktop. Send that file to whoever is helping you.');
+    }
   });
 
   // Esc closes the dialog on top, wherever the focus is.

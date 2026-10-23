@@ -97,6 +97,9 @@ namespace ThinPlaceVR
             });
         }
 
+        public void PostWindowState(bool maximised) =>
+            Post(new Dictionary<string, object> { ["type"] = "window", ["maximised"] = maximised });
+
         public void PushState()
         {
             var cfg = ConfigStore.Load();
@@ -297,7 +300,7 @@ namespace ThinPlaceVR
             }
             Post(new Dictionary<string, object> { ["type"] = "reply", ["id"] = id, ["ok"] = error == null, ["error"] = error, ["data"] = _replyData });
             _replyData = null;
-            if (cmd != "action") PushState();
+            if (cmd != "action" && !cmd.StartsWith("win")) PushState();
         }
 
         private bool Save(Action<Dictionary<string, object>> change)
@@ -558,6 +561,19 @@ namespace ThinPlaceVR
                         if (ConfigStore.Str(cfg, "active_wheel", "") == rid)
                             cfg["active_wheel"] = wheels.Count > 0 ? ConfigStore.Str((Dictionary<string, object>)wheels[0], "id", "") : "";
                     });
+                    return null;
+                }
+
+                case "winDrag": (_form as MainForm)?.BeginDrag(); return null;
+                case "winMax": (_form as MainForm)?.ToggleMaximise(); return null;
+                case "winMin": (_form as MainForm)?.MinimiseWindow(); return null;
+                case "quit": _form.Close(); return null;
+
+                case "makeReport":
+                {
+                    string path = await System.Threading.Tasks.Task.Run(() => Report.Make(ActiveRuntime(), LayerRegistered()));
+                    Process.Start("explorer.exe", "/select,\"" + path + "\"");
+                    _replyData = new Dictionary<string, object> { ["path"] = path, ["name"] = Path.GetFileName(path) };
                     return null;
                 }
 

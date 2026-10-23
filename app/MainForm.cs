@@ -24,21 +24,83 @@ namespace ThinPlaceVR
             ClientSize = new Size(1200, 760);
             MinimumSize = new Size(980, 640);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+            Padding = new Padding(ResizeBorder); // a thin edge outside the web view, so the window can be resized
             Controls.Add(_web);
             Load += async (s, e) => await StartAsync();
+            Resize += (s, e) =>
+            {
+                Padding = WindowState == FormWindowState.Maximized ? new Padding(0) : new Padding(ResizeBorder);
+                _bridge?.PostWindowState(WindowState == FormWindowState.Maximized);
+            };
             FormClosed += (s, e) => _bridge?.Dispose();
         }
+
+        // ---- our own window frame -------------------------------------------------------------
+        // The standard title bar is removed (WM_NCCALCSIZE) while keeping a normal resizable window,
+        // so Windows still gives it a shadow, rounded corners, snapping and minimise from the taskbar.
+        // The interface draws its own title bar and asks us to start dragging or change state.
+
+        private const int ResizeBorder = 6;
+        private const int WM_NCCALCSIZE = 0x83, WM_NCHITTEST = 0x84, WM_NCLBUTTONDOWN = 0xA1, HTCAPTION = 2;
 
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            // Dark title bar to match the app (Windows 10 2004+ / Windows 11).
             int on = 1;
-            DwmSetWindowAttribute(Handle, 20, ref on, sizeof(int));
+            DwmSetWindowAttribute(Handle, 20, ref on, sizeof(int)); // dark frame colours
+            int round = 2;
+            DwmSetWindowAttribute(Handle, 33, ref round, sizeof(int)); // rounded corners (Windows 11)
+            var m = new MARGINS { Top = 1 };
+            DwmExtendFrameIntoClientArea(Handle, ref m); // keeps the shadow
+            SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, 0x0027); // SWP_FRAMECHANGED | NOMOVE | NOSIZE | NOZORDER
         }
 
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+        protected override void WndProc(ref Message msg)
+        {
+            if (msg.Msg == WM_NCCALCSIZE && msg.WParam != IntPtr.Zero)
+            {
+                if (WindowState == FormWindowState.Maximized)
+                {
+                    // Keep a maximised window inside the screen's working area (not under the taskbar).
+                    var p = Marshal.PtrToStructure<NCCALCSIZE_PARAMS>(msg.LParam);
+                    var wa = Screen.FromHandle(Handle).WorkingArea;
+                    p.rgrc0 = new RECT { Left = wa.Left, Top = wa.Top, Right = wa.Right, Bottom = wa.Bottom };
+                    Marshal.StructureToPtr(p, msg.LParam, false);
+                }
+                msg.Result = IntPtr.Zero;
+                return;
+            }
+            if (msg.Msg == WM_NCHITTEST && WindowState != FormWindowState.Maximized)
+            {
+                var pt = PointToClient(new Point((short)(msg.LParam.ToInt64() & 0xFFFF), (short)((msg.LParam.ToInt64() >> 16) & 0xFFFF)));
+                int b = ResizeBorder;
+                bool l = pt.X < b, r = pt.X >= ClientSize.Width - b, t = pt.Y < b, bo = pt.Y >= ClientSize.Height - b;
+                int hit = t && l ? 13 : t && r ? 14 : bo && l ? 16 : bo && r ? 17 : l ? 10 : r ? 11 : t ? 12 : bo ? 15 : 0;
+                if (hit != 0) { msg.Result = (IntPtr)hit; return; }
+            }
+            base.WndProc(ref msg);
+        }
+
+        public void BeginDrag()
+        {
+            ReleaseCapture();
+            SendMessage(Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+        }
+
+        public void ToggleMaximise() =>
+            WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+
+        public void MinimiseWindow() => WindowState = FormWindowState.Minimized;
+
+        [StructLayout(LayoutKind.Sequential)] private struct MARGINS { public int Left, Right, Top, Bottom; }
+        [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
+        [StructLayout(LayoutKind.Sequential)] private struct NCCALCSIZE_PARAMS { public RECT rgrc0, rgrc1, rgrc2; public IntPtr lppos; }
+
+        [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+        [DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS m);
+        [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        [DllImport("user32.dll")] private static extern bool ReleaseCapture();
+        [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
 
         private async System.Threading.Tasks.Task StartAsync()
         {
