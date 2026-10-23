@@ -41,6 +41,11 @@ struct RectWindow {
     bool onlyWhileAdjusting = false; // e.g. a keyboard window: shown only in edit mode / while the app adjusts
     std::string shape = "rect";      // rect, rounded, ellipse, or custom (traced; outline in shapeFile)
     std::string shapeFile;
+    // A panel shows something from the PC instead of the real world: the app captures it and
+    // shares the picture under this id. Empty = a normal passthrough window.
+    std::string source;       // window, web, pdf, camera (for the app; the layer only needs the id)
+    std::string sourceTarget; // window title, address or file
+    std::string sourceId;
     Pose pose;
 };
 

@@ -30,6 +30,8 @@ enum class Action : int {
     ToggleWindow = 25,   // O: selected window on / off
     CycleShape = 26,     // S: selected window's shape
     BringBoard = 27,     // B: move the setup panel back in front of you
+    PanelUp = 28,        // [: scroll the selected panel up
+    PanelDown = 29,      // ]: scroll the selected panel down
 };
 
 void StartHotkeys();

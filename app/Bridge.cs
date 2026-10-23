@@ -23,6 +23,7 @@ namespace ThinPlaceVR
         private readonly JavaScriptSerializer _json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
         private readonly Link _link = new Link();
         private readonly WheelWatcher _wheel = new WheelWatcher();
+        private readonly SourceHost _sources;
         private double _range = 900, _centre;
         private bool _invert;
         private readonly Timer _liveTimer = new Timer { Interval = 150 };
@@ -41,8 +42,14 @@ namespace ThinPlaceVR
             _form = form;
             _web = web;
             _web.WebMessageReceived += OnMessage;
-            _liveTimer.Tick += (s, e) => PushLive();
-            _slowTimer.Tick += (s, e) => PushState();
+            _sources = new SourceHost(form);
+            _sources.AspectKnown += MatchPanelAspect;
+            _liveTimer.Tick += (s, e) =>
+            {
+                PushLive();
+                if (_link.TakePanelCommand(out int win, out int pc)) _sources.Scroll(win, pc);
+            };
+            _slowTimer.Tick += (s, e) => { PushState(); SyncSources(); };
             _liveTimer.Start();
             _wheel.Start();
             _slowTimer.Start();
@@ -50,6 +57,7 @@ namespace ThinPlaceVR
             _web.NavigationCompleted += async (s, e) =>
             {
                 PushState();
+                SyncSources();
                 await CheckForUpdates(quiet: true);
             };
         }
@@ -95,6 +103,7 @@ namespace ThinPlaceVR
                 ["steering"] = Math.Round(s.SteeringDeg, 1),
                 ["hasAngle"] = hasAngle,
                 ["watching"] = _wheel.Active,
+                ["sources"] = _sources.Status(),
                 ["otherApp"] = _wheel.OtherApp,
                 ["enabled"] = s.WindowsEnabled,
                 ["selected"] = s.Selected,
@@ -157,6 +166,9 @@ namespace ThinPlaceVR
                 ["onlyWhileAdjusting"] = ConfigStore.Bool(w, "only_while_adjusting", false),
                 ["shape"] = ConfigStore.Str(w, "shape", "rect"),
                 ["shapePath"] = ConfigStore.Str(w, "shape", "rect") == "custom" ? ShapePath(ConfigStore.Str(w, "shape_file", "")) : "",
+                ["source"] = ConfigStore.Str(w, "source", ""),
+                ["sourceTarget"] = ConfigStore.Str(w, "source_target", ""),
+                ["sourceId"] = ConfigStore.Str(w, "source_id", ""),
             }).ToList();
             return new Dictionary<string, object>
             {
@@ -314,6 +326,61 @@ namespace ThinPlaceVR
             if (cmd != "action" && !cmd.StartsWith("win")) PushState();
         }
 
+        // ---- panels ----------------------------------------------------------------------------
+
+        private void SyncSources()
+        {
+            try
+            {
+                var cfg = ConfigStore.Load();
+                var wanted = new List<SourceHost.Wanted>();
+                if (cfg != null)
+                {
+                    var list = ConfigStore.List(cfg, "windows");
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        if (!(list[i] is Dictionary<string, object> w)) continue;
+                        string kind = ConfigStore.Str(w, "source", "");
+                        if (kind.Length == 0 || !ConfigStore.Bool(w, "enabled", true)) continue;
+                        wanted.Add(new SourceHost.Wanted
+                        {
+                            Id = ConfigStore.Str(w, "source_id", ""),
+                            Kind = kind,
+                            Target = ConfigStore.Str(w, "source_target", ""),
+                            Name = ConfigStore.Str(w, "name", "Panel"),
+                            WidthMm = ConfigStore.Num(w, "width_mm", 200),
+                            HeightMm = ConfigStore.Num(w, "height_mm", 120),
+                            Index = i,
+                        });
+                    }
+                }
+                _sources.Sync(wanted);
+            }
+            catch (Exception ex)
+            {
+                Updater.Log("Panels: " + ex.Message);
+            }
+        }
+
+        // A desktop window's panel takes the window's proportions, so nothing looks stretched.
+        private void MatchPanelAspect(string id, int pxW, int pxH)
+        {
+            try
+            {
+                ConfigStore.Update(cfg =>
+                {
+                    foreach (var w in ConfigStore.List(cfg, "windows").OfType<Dictionary<string, object>>())
+                    {
+                        if (ConfigStore.Str(w, "source_id", "") != id) continue;
+                        double wmm = ConfigStore.Num(w, "width_mm", 200), hmm = ConfigStore.Num(w, "height_mm", 120);
+                        double want = Math.Round(wmm * pxH / pxW, 1);
+                        if (Math.Abs(want - hmm) / Math.Max(1, hmm) > 0.03) w["height_mm"] = Math.Max(20, Math.Min(800, want));
+                    }
+                });
+            }
+            catch { }
+        }
+
         private bool Save(Action<Dictionary<string, object>> change)
         {
             if (!ConfigStore.Exists) throw new Exception("Settings appear after Thin Place VR has run in a game once.");
@@ -336,6 +403,51 @@ namespace ThinPlaceVR
             {
                 case "refresh":
                     return null;
+
+                case "setSource":
+                {
+                    int index = (int)D(a, "index");
+                    string kind = ConfigStore.Str(a, "source", "");
+                    if (kind != "" && kind != "window" && kind != "web" && kind != "pdf" && kind != "camera" && kind != "data")
+                        return "Unknown panel type.";
+                    Save(cfg =>
+                    {
+                        var w = WindowAt(cfg, index);
+                        w["source"] = kind;
+                        if (a.ContainsKey("target")) w["source_target"] = Convert.ToString(a["target"]).Trim();
+                        if (kind.Length == 0) { w["source_id"] = ""; return; }
+                        if (ConfigStore.Str(w, "source_id", "").Length == 0) w["source_id"] = Guid.NewGuid().ToString("N").Substring(0, 12);
+                        w["shape"] = "rect";
+                        w["only_while_adjusting"] = false;
+                    });
+                    SyncSources();
+                    return null;
+                }
+
+                case "listDesktopWindows":
+                    _replyData = SourceHost.DesktopWindowTitles();
+                    return null;
+
+                case "choosePdf":
+                {
+                    int index = (int)D(a, "index");
+                    string file;
+                    using (var dlg = new OpenFileDialog { Title = "Choose a PDF to show in VR", Filter = "PDF files|*.pdf" })
+                    {
+                        if (dlg.ShowDialog(_form) != DialogResult.OK) return null;
+                        file = dlg.FileName;
+                    }
+                    await Handle("setSource", new Dictionary<string, object> { ["index"] = index, ["source"] = "pdf", ["target"] = file });
+                    return null;
+                }
+
+                case "scrollPanel":
+                {
+                    var cfg = ConfigStore.Load();
+                    var w = cfg == null ? null : WindowAt(cfg, (int)D(a, "index"));
+                    if (w != null) _sources.ScrollById(ConfigStore.Str(w, "source_id", ""), (int)D(a, "dir"));
+                    return null;
+                }
 
                 case "forgetLayout":
                 {
@@ -760,6 +872,7 @@ namespace ThinPlaceVR
             _watcher.Dispose();
             _link.Dispose();
             _wheel.Dispose();
+            _sources.Dispose();
         }
     }
 }

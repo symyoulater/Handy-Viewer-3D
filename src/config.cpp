@@ -118,6 +118,9 @@ bool SaveConfig(const Config& c) {
                         {"only_while_adjusting", w.onlyWhileAdjusting},
                         {"shape", w.shape},
                         {"shape_file", w.shapeFile},
+                        {"source", w.source},
+                        {"source_target", w.sourceTarget},
+                        {"source_id", w.sourceId},
                         {"pose", PoseToJson(w.pose)}});
     }
     j["windows"] = wins;
@@ -215,6 +218,10 @@ bool LoadConfig(Config& c) {
                 r.onlyWhileAdjusting = w.value("only_while_adjusting", false);
                 r.shape = w.value("shape", std::string("rect"));
                 r.shapeFile = w.value("shape_file", std::string());
+                r.source = w.value("source", std::string());
+                r.sourceTarget = w.value("source_target", std::string());
+                r.sourceId = w.value("source_id", std::string());
+                if (r.source.empty()) r.sourceId.clear();
                 if (w.contains("pose")) PoseFromJson(w["pose"], r.pose);
                 c.windows.push_back(r);
             }

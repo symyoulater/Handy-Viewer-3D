@@ -32,6 +32,12 @@ struct LinkBlock {
     int32_t cmdAction;       // hv::Action value
     int32_t cmdTarget;       // window to act on (0 = wheel, 1.. = others), -1 = current
     int32_t cmdFine;         // 1 = small steps
+
+    // Layer -> app: scroll a panel (edit-mode [ and ] keys)
+    uint32_t panelSeq;       // layer increments after filling the fields below
+    int32_t panelWindow;     // window index in config (0-based list of windows)
+    int32_t panelCmd;        // 1 = scroll up, 2 = scroll down
+    uint8_t reserved[160];   // room to grow without changing the size again
 };
 #pragma pack(pop)
 
@@ -43,10 +49,12 @@ static_assert(offsetof(LinkBlock, runtime) == 164, "link layout");
 static_assert(offsetof(LinkBlock, wheelBase) == 228, "link layout");
 static_assert(offsetof(LinkBlock, cmdSeq) == 324, "link layout");
 static_assert(offsetof(LinkBlock, cmdFine) == 336, "link layout");
-static_assert(sizeof(LinkBlock) == 340, "link layout");
+static_assert(offsetof(LinkBlock, panelSeq) == 340, "link layout");
+static_assert(offsetof(LinkBlock, panelCmd) == 348, "link layout");
+static_assert(sizeof(LinkBlock) == 512, "link layout");
 
 constexpr uint32_t kLinkMagic = 0x52565054; // "TPVR"
-constexpr uint32_t kLinkVersion = 1;
+constexpr uint32_t kLinkVersion = 2;
 
 // Opens (or creates) the block. Returns nullptr if shared memory is unavailable.
 LinkBlock* OpenLink();

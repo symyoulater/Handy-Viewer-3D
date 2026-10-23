@@ -14,7 +14,11 @@ namespace ThinPlaceVR
         // Byte offsets of each field (pack 4, see src/shared.h).
         private const int OffMagic = 0, OffVersion = 4, OffHeartbeat = 8, OffSteering = 16, OffWheelFound = 20,
             OffEnabled = 24, OffSelected = 28, OffEditMode = 32, OffGame = 36, OffRuntime = 164, OffWheelBase = 228,
-            OffCmdSeq = 324, OffCmdAction = 328, OffCmdTarget = 332, OffCmdFine = 336, Size = 340;
+            OffCmdSeq = 324, OffCmdAction = 328, OffCmdTarget = 332, OffCmdFine = 336,
+            OffPanelSeq = 340, OffPanelWindow = 344, OffPanelCmd = 348, Size = 512;
+
+        private uint _lastPanelSeq;
+        private bool _panelSeqKnown;
 
         private MemoryMappedFile _file;
         private MemoryMappedViewAccessor _view;
@@ -41,7 +45,7 @@ namespace ThinPlaceVR
                 if (_view.ReadUInt32(OffMagic) != Magic)
                 {
                     _view.Write(OffMagic, Magic);
-                    _view.Write(OffVersion, 1u);
+                    _view.Write(OffVersion, 2u);
                 }
                 return true;
             }
@@ -83,6 +87,21 @@ namespace ThinPlaceVR
             _view.Write(OffCmdFine, fine ? 1 : 0);
             System.Threading.Thread.MemoryBarrier();
             _view.Write(OffCmdSeq, _view.ReadUInt32(OffCmdSeq) + 1);
+            return true;
+        }
+
+        // A scroll request from the headset ([ and ] in edit mode), if a new one has arrived.
+        public bool TakePanelCommand(out int window, out int cmd)
+        {
+            window = -1;
+            cmd = 0;
+            if (!Open()) return false;
+            uint seq = _view.ReadUInt32(OffPanelSeq);
+            if (!_panelSeqKnown) { _lastPanelSeq = seq; _panelSeqKnown = true; return false; }
+            if (seq == _lastPanelSeq) return false;
+            _lastPanelSeq = seq;
+            window = _view.ReadInt32(OffPanelWindow);
+            cmd = _view.ReadInt32(OffPanelCmd);
             return true;
         }
 

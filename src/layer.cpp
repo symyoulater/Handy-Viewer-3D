@@ -37,7 +37,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.9.1"
+#define HV_VERSION "0.10.0"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -82,6 +82,14 @@ struct Window {
     bool highlighted = false;
     bool needsUpload = true;
     bool failed = false;
+    // Panels: a picture shared by the desktop app instead of a passthrough cut-out.
+    bool isPanel = false;
+    std::string sourceId;
+    HANDLE srcMap = nullptr;
+    const uint8_t* srcView = nullptr;
+    uint32_t srcSeq = 0;
+    DWORD srcNextTry = 0;
+    bool showingPlaceholder = false;
 };
 
 struct State {
@@ -328,6 +336,156 @@ Shape WindowShape(const RectWindow& rw) {
 }
 
 // (Re)build the windows from the current config.
+// ---------------------------------------------------------------------------
+// Panels: pictures shared by the desktop app (a desktop window, web page, PDF or camera).
+// The app writes frames into shared memory "Local\ThinPlaceVR.Src.<id>":
+//   uint32 magic 'TPVS', uint32 seq (odd while writing), uint32 width, uint32 height, 16 bytes spare,
+//   then width*height BGRA pixels.
+// ---------------------------------------------------------------------------
+constexpr uint32_t kSrcMagic = 0x53565054; // "TPVS"
+constexpr size_t kSrcHeader = 32;
+constexpr uint32_t kSrcMaxW = 1920, kSrcMaxH = 1200;
+constexpr size_t kSrcBytes = kSrcHeader + (size_t)kSrcMaxW * kSrcMaxH * 4;
+
+void CloseSource(Window& w) {
+    if (w.srcView) UnmapViewOfFile(w.srcView);
+    if (w.srcMap) CloseHandle(w.srcMap);
+    w.srcView = nullptr;
+    w.srcMap = nullptr;
+    w.srcSeq = 0;
+}
+
+// A dark card with a line of text, shown until the app sends a picture.
+void RenderPlaceholder(Window& w, const std::wstring& line1, const std::wstring& line2) {
+    const int W = 512, H = std::max(64, (int)(512.0f * w.halfHmm / std::max(1.0f, w.halfWmm)));
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+    bi.bmiHeader.biWidth = W;
+    bi.bmiHeader.biHeight = -H;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    void* bits = nullptr;
+    HDC dc = CreateCompatibleDC(nullptr);
+    HBITMAP bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!bmp || !bits) { if (bmp) DeleteObject(bmp); DeleteDC(dc); return; }
+    HGDIOBJ old = SelectObject(dc, bmp);
+    RECT all{0, 0, W, H};
+    HBRUSH bg = CreateSolidBrush(w.highlighted ? RGB(36, 32, 48) : RGB(21, 23, 28));
+    FillRect(dc, &all, bg);
+    DeleteObject(bg);
+    SetBkMode(dc, TRANSPARENT);
+    HFONT f1 = CreateFontW(-26, 0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+    HFONT f2 = CreateFontW(-19, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+    SelectObject(dc, f1);
+    SetTextColor(dc, RGB(236, 238, 242));
+    RECT r{24, H / 2 - 40, W - 24, H / 2};
+    DrawTextW(dc, line1.c_str(), -1, &r, DT_CENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+    SelectObject(dc, f2);
+    SetTextColor(dc, RGB(169, 175, 186));
+    r = {24, H / 2 + 4, W - 24, H / 2 + 60};
+    DrawTextW(dc, line2.c_str(), -1, &r, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
+    GdiFlush();
+    if (W != w.texW || H != w.texH) {
+        DestroyWindowResources(w);
+        w.texW = W;
+        w.texH = H;
+    }
+    w.pixels.assign((size_t)W * H * 4, 0);
+    const uint8_t* src = static_cast<const uint8_t*>(bits);
+    for (size_t i = 0; i < (size_t)W * H; ++i) {
+        uint8_t* d = &w.pixels[i * 4];
+        const uint8_t* sp = src + i * 4;
+        if (g.bgra) { d[0] = sp[0]; d[1] = sp[1]; d[2] = sp[2]; }
+        else { d[0] = sp[2]; d[1] = sp[1]; d[2] = sp[0]; }
+        d[3] = 235;
+    }
+    SelectObject(dc, old);
+    DeleteObject(f1);
+    DeleteObject(f2);
+    DeleteObject(bmp);
+    DeleteDC(dc);
+    w.needsUpload = true;
+    w.showingPlaceholder = true;
+}
+
+// Picks up a new frame from the app, if there is one. Cheap when nothing has changed.
+void UpdatePanel(Window& w, const RectWindow& rw) {
+    w.halfWmm = rw.widthMm * 0.5f;
+    w.halfHmm = rw.heightMm * 0.5f;
+    if (!w.srcView) {
+        DWORD now = GetTickCount();
+        if (now >= w.srcNextTry) {
+            w.srcNextTry = now + 2000;
+            std::wstring name = L"Local\\ThinPlaceVR.Src." + Widen(w.sourceId);
+            w.srcMap = OpenFileMappingW(FILE_MAP_READ, FALSE, name.c_str());
+            if (w.srcMap) {
+                w.srcView = static_cast<const uint8_t*>(MapViewOfFile(w.srcMap, FILE_MAP_READ, 0, 0, kSrcBytes));
+                if (!w.srcView) { CloseHandle(w.srcMap); w.srcMap = nullptr; }
+                else Log("Panel %s connected to the app", rw.name.c_str());
+            }
+        }
+        if (!w.srcView) {
+            if (!w.showingPlaceholder || w.texW == 0)
+                RenderPlaceholder(w, Widen(rw.name), L"Waiting for the Thin Place VR app - open it on the PC to show this panel");
+            return;
+        }
+    }
+    if (w.texW == 0) RenderPlaceholder(w, Widen(rw.name), L"Starting...");
+    const volatile uint32_t* hdr = reinterpret_cast<const volatile uint32_t*>(w.srcView);
+    if (hdr[0] != kSrcMagic) return;
+    uint32_t seq = hdr[1];
+    if (seq == w.srcSeq || (seq & 1)) return;
+    uint32_t iw = hdr[2], ih = hdr[3];
+    if (iw == 0 || ih == 0 || iw > kSrcMaxW || ih > kSrcMaxH) return;
+    if ((int)iw != w.texW || (int)ih != w.texH) {
+        DestroyWindowResources(w);
+        w.texW = (int)iw;
+        w.texH = (int)ih;
+    }
+    w.pixels.resize((size_t)iw * ih * 4);
+    const uint8_t* src = w.srcView + kSrcHeader;
+    if (g.bgra) {
+        memcpy(w.pixels.data(), src, w.pixels.size());
+    } else {
+        for (size_t i = 0, n = (size_t)iw * ih; i < n; ++i) {
+            w.pixels[i * 4] = src[i * 4 + 2];
+            w.pixels[i * 4 + 1] = src[i * 4 + 1];
+            w.pixels[i * 4 + 2] = src[i * 4];
+        }
+    }
+    MemoryBarrier();
+    if (hdr[1] != seq) return; // the app wrote a new frame while we copied: take the next one
+    for (size_t i = 0, n = (size_t)iw * ih; i < n; ++i) w.pixels[i * 4 + 3] = 255;
+    if (w.highlighted) {
+        // Selection outline: a lilac frame round the edge.
+        const int t = std::max(3, (int)iw / 160);
+        const uint8_t c[3] = {183, 148, 246};
+        for (uint32_t y = 0; y < ih; ++y)
+            for (uint32_t x = 0; x < iw; ++x)
+                if ((int)x < t || (int)y < t || x >= iw - t || y >= ih - t) {
+                    uint8_t* d = &w.pixels[((size_t)y * iw + x) * 4];
+                    if (g.bgra) { d[0] = c[2]; d[1] = c[1]; d[2] = c[0]; }
+                    else { d[0] = c[0]; d[1] = c[1]; d[2] = c[2]; }
+                }
+    }
+    w.srcSeq = seq;
+    w.showingPlaceholder = false;
+    w.needsUpload = true;
+}
+
+// Redraw a window after its size, shape or selection changed.
+void RefreshRect(size_t i) {
+    if (i >= g.rects.size() || i >= g.cfg.windows.size()) return;
+    Window& w = g.rects[i];
+    if (w.isPanel) {
+        w.srcSeq = 0;              // copy the current frame again (with or without the outline)
+        w.showingPlaceholder = false;
+        return;
+    }
+    w.shape = WindowShape(g.cfg.windows[i]);
+    Rasterise(w);
+}
+
 void RebuildWindows() {
     WheelProfile* wp = ActiveWheel();
     DestroyWindowResources(g.wheel);
@@ -342,12 +500,19 @@ void RebuildWindows() {
         }
         g.wheel.marginMm = g.cfg.wheelMarginMm;
     }
-    for (auto& r : g.rects) DestroyWindowResources(r);
+    for (auto& r : g.rects) { DestroyWindowResources(r); CloseSource(r); }
     g.rects.clear();
     for (auto& rw : g.cfg.windows) {
         Window w;
         w.label = rw.name;
-        w.shape = WindowShape(rw);
+        if (!rw.sourceId.empty()) {
+            w.isPanel = true;
+            w.sourceId = rw.sourceId;
+            w.halfWmm = rw.widthMm * 0.5f;
+            w.halfHmm = rw.heightMm * 0.5f;
+        } else {
+            w.shape = WindowShape(rw);
+        }
         g.rects.push_back(std::move(w));
     }
     if (g.selected > (int)g.rects.size()) g.selected = 0;
@@ -355,7 +520,7 @@ void RebuildWindows() {
     if (g.wheel.shape.valid()) Rasterise(g.wheel);
     for (size_t i = 0; i < g.rects.size(); ++i) {
         g.rects[i].highlighted = (g.selected == (int)i + 1) && GetTickCount() < g.highlightUntil;
-        Rasterise(g.rects[i]);
+        if (!g.rects[i].isPanel) Rasterise(g.rects[i]);
     }
     g.structureDirty = false;
 }
@@ -493,6 +658,7 @@ bool Upload(Window& w) {
     if (w.failed) return false;
     if (w.swapchain == XR_NULL_HANDLE && !CreateSwapchain(w)) return false;
     size_t images = g.gfx == Gfx::D3D11 ? w.d3d11Images.size() : w.d3d12Images.size();
+    if (w.isPanel) images = std::min<size_t>(images, 1); // changes often: the newest image is the one shown
     for (size_t n = 0; n < images; ++n) {
         uint32_t index = 0;
         XrSwapchainImageAcquireInfo ai{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
@@ -529,7 +695,7 @@ void Highlight() {
     if (g.wheel.highlighted != wantWheel) { g.wheel.highlighted = wantWheel; if (g.wheel.shape.valid()) Rasterise(g.wheel); }
     for (size_t i = 0; i < g.rects.size(); ++i) {
         bool want = g.selected == (int)i + 1;
-        if (g.rects[i].highlighted != want) { g.rects[i].highlighted = want; Rasterise(g.rects[i]); }
+        if (g.rects[i].highlighted != want) { g.rects[i].highlighted = want; RefreshRect(i); }
     }
 }
 
@@ -537,8 +703,8 @@ void ClearHighlightIfExpired() {
     if (!g.highlightUntil || GetTickCount() < g.highlightUntil) return;
     g.highlightUntil = 0;
     if (g.wheel.highlighted) { g.wheel.highlighted = false; if (g.wheel.shape.valid()) Rasterise(g.wheel); }
-    for (auto& r : g.rects)
-        if (r.highlighted) { r.highlighted = false; Rasterise(r); }
+    for (size_t i = 0; i < g.rects.size(); ++i)
+        if (g.rects[i].highlighted) { g.rects[i].highlighted = false; RefreshRect(i); }
 }
 
 void MoveLocal(Pose& p, float dx, float dy, float dz) {
@@ -647,6 +813,20 @@ void DoAction(Action action, bool fine, XrTime displayTime) {
         case Action::PlaceInFront:
             PlaceSelectedInFront(displayTime);
             break;
+        case Action::PanelUp:
+        case Action::PanelDown: {
+            if (g.selected == 0 || g.cfg.windows[g.selected - 1].sourceId.empty()) {
+                Log("[ and ] scroll panels - select a panel with Tab first");
+                break;
+            }
+            if (g.link) {
+                g.link->panelWindow = g.selected - 1;
+                g.link->panelCmd = action == Action::PanelUp ? 1 : 2;
+                MemoryBarrier();
+                g.link->panelSeq = g.link->panelSeq + 1;
+            }
+            break;
+        }
         case Action::BringBoard:
             g.boardBring = true;
             if (!g.boardShowing) { g.boardManual = true; g.boardHiddenInEdit = false; }
@@ -663,13 +843,12 @@ void DoAction(Action action, bool fine, XrTime displayTime) {
         case Action::CycleShape: {
             if (g.selected == 0) { Log("The wheel window's shape comes from the rim - press W for the next rim"); break; }
             RectWindow& rw = g.cfg.windows[g.selected - 1];
+            if (!rw.sourceId.empty()) { Log("%s is a panel - panels are always rectangles", rw.name.c_str()); break; }
             const char* order[] = {"rect", "rounded", "ellipse", "custom"};
             int n = rw.shapeFile.empty() ? 3 : 4, cur = 0;
             for (int k = 0; k < n; ++k) if (rw.shape == order[k]) cur = k;
             rw.shape = order[(cur + 1) % n];
-            Window& w = g.rects[g.selected - 1];
-            w.shape = WindowShape(rw);
-            Rasterise(w);
+            RefreshRect(g.selected - 1);
             Log("%s shape: %s", rw.name.c_str(), rw.shape.c_str());
             Highlight();
             MarkChanged();
@@ -708,9 +887,7 @@ void DoAction(Action action, bool fine, XrTime displayTime) {
                 if (rw.heightMm * f < 20.0f) f = 20.0f / rw.heightMm;
                 rw.widthMm *= f;
                 rw.heightMm *= f;
-                Window& w = g.rects[g.selected - 1];
-                w.shape = WindowShape(rw);
-                Rasterise(w);
+                RefreshRect(g.selected - 1);
                 break;
             }
             default: break;
@@ -768,6 +945,11 @@ std::vector<PanelRow> PanelRows() {
         if (!rw.enabled) {
             r.info = L"off";
             r.dim = true;
+        } else if (!rw.sourceId.empty()) {
+            const wchar_t* kind = rw.source == "window" ? L"desktop window" : rw.source == "web" ? L"web page"
+                                : rw.source == "pdf" ? L"PDF" : rw.source == "camera" ? L"camera"
+                                : rw.source == "data" ? L"game data" : L"panel";
+            r.info = std::wstring(kind) + (rw.sourceTarget.empty() ? L"" : L" \x00B7 " + Widen(rw.sourceTarget));
         } else {
             wchar_t b[96];
             swprintf(b, 96, L"%.0f \x00D7 %.0f mm \x00B7 %ls%ls", rw.widthMm, rw.heightMm, Widen(rw.shape).c_str(),
@@ -808,8 +990,8 @@ std::wstring SteeringLine() {
 
 // Draws the setup panel with Windows' own text drawing, then copies it into the window's pixels.
 void RenderBoard(Window& w, const XrSpaceLocation* head) {
-    const int W = 640, H = 780;
-    const float mmW = 220.0f, mmH = 268.0f;
+    const int W = 640, H = 812;
+    const float mmW = 220.0f, mmH = 279.0f;
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
     bi.bmiHeader.biWidth = W;
@@ -909,6 +1091,7 @@ void RenderBoard(Window& w, const XrSpaceLocation* head) {
         {L"O", L"window on / off"},       {L"S", L"change shape"},
         {L"W", L"next rim"},              {L"X", L"centre steering"},
         {L"I", L"flip steering"},         {L"B", L"bring this panel"},
+        {L"[  ]", L"scroll a panel"},
     };
     const int colW = (W - 56) / 2;
     for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i) {
@@ -917,7 +1100,7 @@ void RenderBoard(Window& w, const XrSpaceLocation* head) {
         put(keyf, text, x, yy + 1, x + 78, yy + 30, keys[i][0], one);
         put(body, text2, x + 84, yy, x + colW - 8, yy + 30, keys[i][1], one);
     }
-    y += 7 * 32 + 6;
+    y += 8 * 32 + 6;
     rule(y);
     y += 12;
     put(smallFont, text3, 28, y, W - 28, y + 24, L"Shift = fine steps   \x00B7   Esc = finish   \x00B7   Ctrl+Alt+K = hide", one);
@@ -1213,7 +1396,7 @@ void TeardownSession() {
     g.board = Window{};
     g.boardShowing = false;
     DestroyWindowResources(g.wheel);
-    for (auto& r : g.rects) DestroyWindowResources(r);
+    for (auto& r : g.rects) { DestroyWindowResources(r); CloseSource(r); }
     g.rects.clear();
     g.wheel = Window{};
     if (g.baseSpace) next.DestroySpace(g.baseSpace);
@@ -1296,6 +1479,8 @@ XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* inf
                 if (!g.cfg.windows[i].enabled) continue;
                 if (g.cfg.windows[i].onlyWhileAdjusting && !Adjusting()) continue;
                 Window& w = g.rects[i];
+                if (w.isPanel) UpdatePanel(w, g.cfg.windows[i]);
+                if (w.texW == 0) continue;
                 if (w.needsUpload && !Upload(w)) continue;
                 quads[nq++] = MakeQuad(w, ToXrPose(g.cfg.windows[i].pose, 0.0f));
             }

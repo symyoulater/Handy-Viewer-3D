@@ -184,16 +184,17 @@
           <input type="range" min="50" max="200" step="1" data-set="wheelScale" data-fmt="pct" aria-label="Wheel window size"></div>`
       : `
         <div class="field"><label for="wname" class="muted">Name</label><input id="wname" class="text-in" style="max-width:190px" value="${esc(win.name)}" data-win="name"></div>
+        ${sourceFields(win)}
         <div class="field"><label for="ww">Width (mm)</label><input id="ww" class="num-in" type="number" min="20" max="800" value="${Math.round(win.width)}" data-win="width"></div>
         <div class="field"><label for="wh">Height (mm)</label><input id="wh" class="num-in" type="number" min="20" max="800" value="${Math.round(win.height)}" data-win="height"></div>
-        <div class="field"><label for="wshape">Shape</label>
+        ${win.source ? '' : `<div class="field"><label for="wshape">Shape</label>
           <select id="wshape" class="text-in" style="max-width:190px" data-win="shape">
             <option value="rect" ${win.shape === 'rect' ? 'selected' : ''}>Rectangle</option>
             <option value="rounded" ${win.shape === 'rounded' ? 'selected' : ''}>Rounded</option>
             <option value="ellipse" ${win.shape === 'ellipse' ? 'selected' : ''}>Circle / oval</option>
             ${win.shape === 'custom' ? '<option value="custom" selected>Traced outline</option>' : ''}
           </select></div>
-        <button class="btn" data-act="traceWindow">Trace its outline from a photo…</button>
+        <button class="btn" data-act="traceWindow">Trace its outline from a photo…</button>`}
         <div class="field"><span>Show in VR</span>${sw('wen', win.enabled, '', null, 'data-win="enabled"')}</div>
         <div class="field"><div class="lbl"><span>Only while adjusting</span><span class="muted">Appears in edit mode (Ctrl+Alt+H) or for 20 s after using these buttons</span></div>${sw('wadj', win.onlyWhileAdjusting, '', null, 'data-win="onlyWhileAdjusting"')}</div>
         <button class="btn danger" data-act="removeWindow">Remove this window</button>`;
@@ -230,6 +231,49 @@
           </section>
         </div>
       </div>`;
+  }
+
+  // What a window shows: the real world (a passthrough cut-out) or a panel from the PC.
+  const SOURCES = [['', 'Real world (passthrough)'], ['window', 'A desktop window'], ['web', 'A web page'], ['pdf', 'A PDF'], ['camera', 'The camera']];
+  const DATA_PAGES = [['elite', 'Elite Dangerous status'], ['acevo', 'AC EVO dashboard']];
+  function sourceFields(win) {
+    const kind = win.source || '';
+    const sel = `<div class="field"><label for="wsrc">Shows</label><select id="wsrc" class="text-in" style="max-width:220px" data-act-change="source">
+      ${SOURCES.map(([v, l]) => `<option value="${v}" ${v === kind ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
+    if (!kind) return sel;
+    let target = '';
+    if (kind === 'window') {
+      const titles = (S.desktopWindows || []).slice();
+      if (win.sourceTarget && !titles.includes(win.sourceTarget)) titles.unshift(win.sourceTarget);
+      target = `<div class="field"><label for="wtgt">Window</label><span style="display:flex;gap:6px;min-width:0">
+        <select id="wtgt" class="text-in" style="max-width:220px" data-act-change="sourceTarget">
+          <option value="" ${win.sourceTarget ? '' : 'selected'}>Choose a window…</option>
+          ${titles.map((t) => `<option value="${esc(t)}" ${t === win.sourceTarget ? 'selected' : ''}>${esc(t.length > 60 ? t.slice(0, 57) + '…' : t)}</option>`).join('')}
+        </select><button class="btn small" data-act="refreshWins" aria-label="Refresh the list of windows">↻</button></span></div>`;
+    } else if (kind === 'web') {
+      target = `<div class="field"><label for="wurl">Address</label><span style="display:flex;gap:6px;min-width:0">
+        <input id="wurl" class="text-in" style="max-width:160px" value="${esc(win.sourceTarget || '')}" placeholder="e.g. www.google.com/maps">
+        <button class="btn small" data-act="goUrl">Show</button></span></div>`;
+    } else if (kind === 'pdf') {
+      const file = (win.sourceTarget || '').split(/[\\/]/).pop();
+      target = `<div class="field"><span class="muted" style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(file || 'No PDF chosen')}</span><button class="btn small" data-act="choosePdf">Choose PDF…</button></div>`;
+    } else if (kind === 'camera') {
+      target = '<p class="muted" style="margin:0">Shows the PC\'s camera. Windows asks permission the first time.</p>';
+    } else if (kind === 'data') {
+      target = `<div class="field"><label for="wdata">Page</label><select id="wdata" class="text-in" style="max-width:220px" data-act-change="sourceTarget">
+        <option value="" ${win.sourceTarget ? '' : 'selected'}>Choose…</option>
+        ${DATA_PAGES.map(([v, l]) => `<option value="${v}" ${v === win.sourceTarget ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
+    }
+    const scroll = kind === 'web' || kind === 'pdf'
+      ? `<div class="field"><span>Scroll</span><span style="display:flex;gap:6px"><button class="btn small" data-act="scroll" data-dir="1" aria-label="Scroll up">↑</button><button class="btn small" data-act="scroll" data-dir="2" aria-label="Scroll down">↓</button></span></div>` : '';
+    return `${sel}${target}${scroll}
+      <div class="field"><span class="muted">Status</span><span class="muted" data-live="srcState" data-src="${esc(win.sourceId || '')}">—</span></div>
+      <p class="muted" style="margin:0;line-height:1.5">Panels need this app open. In the headset, [ and ] scroll the selected panel in edit mode.</p>`;
+  }
+
+  async function loadDesktopWindows() {
+    const r = await send('listDesktopWindows');
+    if (r.ok && r.data) { S.desktopWindows = r.data; S.key = ''; refresh(true); }
   }
 
   function windowShapeSvg(win) {
@@ -458,6 +502,10 @@
 
   function patchLive() {
     const L = S.live;
+    document.querySelectorAll('[data-live="srcState"]').forEach((el) => {
+      const st = L.sources && L.sources[el.dataset.src];
+      el.textContent = st || 'Not running';
+    });
     const hasAngle = L.wheelFound && L.hasAngle !== false;
     document.querySelectorAll('[data-live="steer"]').forEach((el) => { el.textContent = hasAngle ? deg(L.steering) : '—'; });
     document.querySelectorAll('[data-live="steerHint"]').forEach((el) => {
@@ -535,6 +583,7 @@
     refresh(true);
     main.focus();
     if (S.page === 'wheel') loadBases();
+    if (S.page === 'windows') loadDesktopWindows();
   });
 
   document.getElementById('version').addEventListener('click', async (e) => {
@@ -573,6 +622,14 @@
       case 'forgetLayout': send('forgetLayout', { key: b.dataset.key }); break;
       case 'addRim': addRim(); break;
       case 'traceWindow': traceWindow(); break;
+      case 'refreshWins': loadDesktopWindows(); break;
+      case 'goUrl': {
+        const url = (document.getElementById('wurl') || {}).value || '';
+        if (url.trim()) send('setSource', { index: S.tab - 1, source: 'web', target: url.trim() });
+        break;
+      }
+      case 'choosePdf': send('choosePdf', { index: S.tab - 1 }); break;
+      case 'scroll': send('scrollPanel', { index: S.tab - 1, dir: +b.dataset.dir }); break;
       case 'findBase': {
         b.disabled = true;
         const label = b.textContent;
@@ -805,6 +862,18 @@
   main.addEventListener('change', (e) => {
     const el = e.target;
     if (el.dataset.actChange === 'base') { send('set', { key: 'deviceMatch', value: el.value }); return; }
+    if (el.dataset.actChange === 'source') {
+      const c = cfg(), win = c && c.windows[S.tab - 1];
+      if (el.value === 'window') loadDesktopWindows();
+      if (el.value === 'pdf') { send('choosePdf', { index: S.tab - 1 }); return; }
+      send('setSource', { index: S.tab - 1, source: el.value, target: win && win.source === el.value ? win.sourceTarget : '' });
+      return;
+    }
+    if (el.dataset.actChange === 'sourceTarget') {
+      const c = cfg(), win = c && c.windows[S.tab - 1];
+      send('setSource', { index: S.tab - 1, source: win ? win.source : '', target: el.value });
+      return;
+    }
     if (el.dataset.set) {
       const value = el.type === 'checkbox' ? el.checked : parseFloat(el.value);
       if (el.type !== 'checkbox' && isNaN(value)) return;
