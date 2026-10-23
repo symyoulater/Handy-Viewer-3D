@@ -73,6 +73,15 @@ Config DefaultConfig() {
     return c;
 }
 
+namespace {
+std::string g_layoutKey, g_layoutLabel;
+}
+
+void SetLayoutGame(const std::string& key, const std::string& label) {
+    g_layoutKey = key;
+    g_layoutLabel = label;
+}
+
 bool SaveConfig(const Config& c) {
     json j;
     j["enabled"] = c.enabled;
@@ -112,6 +121,23 @@ bool SaveConfig(const Config& c) {
                         {"pose", PoseToJson(w.pose)}});
     }
     j["windows"] = wins;
+
+    // Every game's positions; this game's entry is refreshed from the current layout.
+    j["per_game_layouts"] = c.perGameLayouts;
+    json layouts = c.layoutsJson.empty() ? json::object() : json::parse(c.layoutsJson, nullptr, false);
+    if (!layouts.is_object()) layouts = json::object();
+    if (c.perGameLayouts && !g_layoutKey.empty()) {
+        json e;
+        e["label"] = g_layoutLabel.empty() ? g_layoutKey : g_layoutLabel;
+        json ew = json::object();
+        for (const auto& w : c.wheels) ew[w.id] = PoseToJson(w.pose);
+        e["wheels"] = ew;
+        json er = json::object();
+        for (const auto& w : c.windows) er[w.name] = {{"pose", PoseToJson(w.pose)}, {"enabled", w.enabled}};
+        e["windows"] = er;
+        layouts[g_layoutKey] = e;
+    }
+    j["game_layouts"] = layouts;
 
     // Write to a temp file then swap, so a crash never leaves a half-written config.
     std::wstring path = ConfigPath();
@@ -191,6 +217,25 @@ bool LoadConfig(Config& c) {
                 r.shapeFile = w.value("shape_file", std::string());
                 if (w.contains("pose")) PoseFromJson(w["pose"], r.pose);
                 c.windows.push_back(r);
+            }
+        }
+        c.perGameLayouts = j.value("per_game_layouts", true);
+        if (j.contains("game_layouts") && j["game_layouts"].is_object()) {
+            c.layoutsJson = j["game_layouts"].dump();
+            // This game's own positions, if it has some. Sizes and shapes stay shared between games.
+            if (c.perGameLayouts && !g_layoutKey.empty() && j["game_layouts"].contains(g_layoutKey)) {
+                const auto& e = j["game_layouts"][g_layoutKey];
+                if (e.contains("wheels") && e["wheels"].is_object())
+                    for (auto& w : c.wheels)
+                        if (e["wheels"].contains(w.id)) PoseFromJson(e["wheels"][w.id], w.pose);
+                if (e.contains("windows") && e["windows"].is_object())
+                    for (auto& w : c.windows)
+                        if (e["windows"].contains(w.name)) {
+                            const auto& ew = e["windows"][w.name];
+                            if (ew.contains("pose")) PoseFromJson(ew["pose"], w.pose);
+                            w.enabled = ew.value("enabled", w.enabled);
+                        }
+                c.wheelPlaced = true;
             }
         }
         return true;

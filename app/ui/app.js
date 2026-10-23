@@ -223,6 +223,11 @@
             <p class="muted" style="margin:0;line-height:1.5">Works while a game is running in VR. Point your head at where the window should go, then press Place — Virtual Desktop's desktop view lets you click these without taking the headset off.</p>
           </section>
           <section class="card" aria-labelledby="shape-h"><h2 id="shape-h">${isWheel ? 'Shape' : 'Window'}</h2>${shape}</section>
+          <section class="card" aria-labelledby="games-h"><h2 id="games-h">Each game</h2>
+            <div class="field"><div class="lbl"><span>Separate positions for each game</span><span class="muted">Each game remembers where its windows go. Sizes and shapes are shared.</span></div>${sw('pergame', c.perGameLayouts !== false, 'Separate positions for each game', 'perGameLayouts')}</div>
+            ${(c.layouts || []).length ? (c.layouts || []).map((l) => `<div class="field"><span>${esc(l.label)}</span><button class="btn small" data-act="forgetLayout" data-key="${esc(l.key)}">Forget</button></div>`).join('')
+              : '<p class="muted" style="margin:0">No game has its own positions yet. They are saved the first time you adjust a window in a game.</p>'}
+          </section>
         </div>
       </div>`;
   }
@@ -565,6 +570,7 @@
         }
         break;
       case 'rim': send('set', { key: 'activeWheel', value: b.dataset.id }); break;
+      case 'forgetLayout': send('forgetLayout', { key: b.dataset.key }); break;
       case 'addRim': addRim(); break;
       case 'traceWindow': traceWindow(); break;
       case 'findBase': {

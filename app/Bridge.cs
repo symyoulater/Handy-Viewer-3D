@@ -173,6 +173,12 @@ namespace ThinPlaceVR
                 ["wheelPlaced"] = ConfigStore.Bool(cfg, "wheel_placed", false),
                 ["wheels"] = wheels,
                 ["windows"] = windows,
+                ["perGameLayouts"] = ConfigStore.Bool(cfg, "per_game_layouts", true),
+                ["layouts"] = ConfigStore.Obj(cfg, "game_layouts").Select(kv => new Dictionary<string, object>
+                {
+                    ["key"] = kv.Key,
+                    ["label"] = kv.Value is Dictionary<string, object> e ? ConfigStore.Str(e, "label", kv.Key) : kv.Key,
+                }).OrderBy(d => (string)d["label"]).ToList(),
             };
         }
 
@@ -331,6 +337,13 @@ namespace ThinPlaceVR
                 case "refresh":
                     return null;
 
+                case "forgetLayout":
+                {
+                    string key = ConfigStore.Str(a, "key", "");
+                    Save(cfg => ConfigStore.Obj(cfg, "game_layouts").Remove(key));
+                    return null;
+                }
+
                 case "page":
                     _wheel.Active = ConfigStore.Str(a, "page", "") == "wheel";
                     // Smooth updates (30 a second) while the live angle is on screen; otherwise a few a second.
@@ -347,6 +360,7 @@ namespace ThinPlaceVR
                         switch (key)
                         {
                             case "enabled": cfg["enabled"] = Convert.ToBoolean(value); break;
+                            case "perGameLayouts": cfg["per_game_layouts"] = Convert.ToBoolean(value); break;
                             case "margin": cfg["wheel_margin_mm"] = Clamp(value, 0, 150); break;
                             case "distanceCm": cfg["place_distance_m"] = Clamp(value, 20, 150) / 100.0; break;
                             case "nudgeMm": cfg["nudge_mm"] = Clamp(value, 1, 50); break;

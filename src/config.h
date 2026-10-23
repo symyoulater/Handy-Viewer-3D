@@ -57,6 +57,9 @@ struct Config {
     std::string activeWheel = "300gt";
     std::vector<WheelProfile> wheels;
     std::vector<RectWindow> windows;
+    // Window positions are kept separately for each game (by its .exe), so each game remembers its own.
+    bool perGameLayouts = true;
+    std::string layoutsJson; // every game's saved positions, kept as raw JSON
 };
 
 // A shape outline in millimetres, centred on its rotation point.
@@ -64,6 +67,10 @@ struct Shape {
     std::vector<std::pair<float, float>> points;
     bool valid() const { return points.size() >= 3; }
 };
+
+// The game this process is (lower-case .exe name, and its display name). Set once at start-up;
+// loading then applies that game's saved positions, and saving records them.
+void SetLayoutGame(const std::string& key, const std::string& label);
 
 Config DefaultConfig();
 bool LoadConfig(Config& out);      // creates the file with defaults if missing

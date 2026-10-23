@@ -37,7 +37,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.9.0"
+#define HV_VERSION "0.9.1"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -869,7 +869,9 @@ void RenderBoard(Window& w, const XrSpaceLocation* head) {
     }
 
     // Windows
-    put(head2, text3, 28, y, W - 28, y + 22, L"WINDOWS  \x00B7  Tab selects", one);
+    put(head2, text3, 28, y, W - 28, y + 22,
+        g.cfg.perGameLayouts && !g.gameName.empty() ? L"WINDOWS FOR " + Widen(g.gameName) + L"  \x00B7  Tab selects"
+                                                    : std::wstring(L"WINDOWS  \x00B7  Tab selects"), one);
     y += 28;
     for (const PanelRow& r : PanelRows()) {
         if (y > 330) { put(smallFont, text3, 28, y, W - 28, y + 22, L"\x2026 more in the app", one); y += 26; break; }
@@ -1375,6 +1377,9 @@ XrResult XRAPI_CALL Hook_xrCreateApiLayerInstance(const XrInstanceCreateInfo* in
         std::wstring e(exe);
         auto slash = e.find_last_of(L"\\/");
         g.gameExe = Narrow(slash == std::wstring::npos ? e : e.substr(slash + 1));
+        std::string key = g.gameExe;
+        for (auto& ch : key) ch = (char)tolower((unsigned char)ch);
+        SetLayoutGame(key, g.gameName.empty() ? g.gameExe : g.gameName);
     }
     Resolve(*instance, "xrDestroyInstance", next.DestroyInstance);
     Resolve(*instance, "xrCreateSession", next.CreateSession);
