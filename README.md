@@ -6,7 +6,7 @@
 
 Thin Place VR adds flat "windows" to any OpenXR game, filled with Virtual Desktop's chroma-key colour (magenta). Virtual Desktop replaces that colour with the Quest 3's passthrough cameras, so your real kit shows through exactly where it sits. The wheel window turns with your Simucube, so it hugs the rim at any steering angle.
 
-**Version 0.10.0** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
+**Version 0.11.0** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
 
 ---
 
@@ -120,5 +120,5 @@ Windows **Settings → Apps → Installed apps → Thin Place VR → Uninstall**
 2. **In-headset editor** — setup panel and per-game positions *(done)*; adjusting with the controllers *(to do)*
 3. **Hands** — hand-shaped cutouts, gestures as buttons
 4. **Sources** — desktop windows, web pages, camera, PDFs as panels *(done: choose "Shows" on the Windows page; the app must stay open)*
-5. **Game data** — LMU and AC EVO telemetry panels, Elite Dangerous status panels
+5. **Game data** — AC EVO dashboard and Elite Dangerous status panels *(done: Shows → Game data)*; LMU once the add-on is signed
 6. **Polish** — Stream Deck profile, auto-updates

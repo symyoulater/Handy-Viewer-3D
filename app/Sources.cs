@@ -28,7 +28,23 @@ namespace ThinPlaceVR
         // so the panel can be given the same proportions.
         public event Action<string, int, int> AspectKnown;
 
-        public SourceHost(Form owner) { _owner = owner; }
+        private readonly System.Windows.Forms.Timer _dataTimer = new System.Windows.Forms.Timer { Interval = 100 };
+
+        public SourceHost(Form owner)
+        {
+            _owner = owner;
+            // Game-data pages get fresh numbers ten times a second.
+            _dataTimer.Tick += (s, e) =>
+            {
+                var pages = _running.Values.OfType<WebCapturer>().Where(c => c.Kind == "data").GroupBy(c => c.Target);
+                foreach (var g in pages)
+                {
+                    string json = Telemetry.Read(g.Key);
+                    if (json != null) foreach (var c in g) c.PostData(json);
+                }
+            };
+            _dataTimer.Start();
+        }
 
         public sealed class Wanted
         {
@@ -94,6 +110,7 @@ namespace ThinPlaceVR
 
         public void Dispose()
         {
+            _dataTimer.Stop();
             foreach (var c in _running.Values) c.Dispose();
             _running.Clear();
         }

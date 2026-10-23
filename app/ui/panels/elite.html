@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'">
+<title>Elite Dangerous status</title>
+<link rel="stylesheet" href="panel.css">
+<style>
+  body { display: grid; grid-template-columns: 1fr 1.25fr; gap: 1.4vw; padding: 1.6vw; }
+  .col { display: flex; flex-direction: column; gap: 1.4vw; min-height: 0; }
+  .state { font-size: 4.4vw; font-weight: 600; } .legal { font-size: 2.2vw; color: var(--text-2); margin-top: .4vw; }
+  .legal.bad { color: var(--bad); }
+  .big { font-size: 5vw; } .big small { font-size: 2vw; color: var(--text-2); margin-left: .5vw; }
+  .bar { height: 1.8vw; background: #22252B; border-radius: .6vw; overflow: hidden; margin-top: .8vw; } .bar i { display: block; height: 100%; background: var(--accent); width: 0; }
+  .low { color: var(--bad); }
+  .pips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2vw; flex: 1; }
+  .pip { display: flex; flex-direction: column-reverse; gap: .6vw; align-items: stretch; }
+  .pip span { text-align: center; font-weight: 600; font-size: 2.2vw; color: var(--text-2); }
+  .pip i { flex: 1; border-radius: .5vw; background: #22252B; position: relative; overflow: hidden; }
+  .pip i::after { content: ""; position: absolute; inset: 0; background: var(--accent); transform: scaleY(0); transform-origin: bottom; }
+  .pip i.half::after { transform: scaleY(.5); } .pip i.full::after { transform: scaleY(1); }
+  .chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1vw; }
+  .chip { padding: 1vw .6vw; border-radius: .8vw; background: #22252B; color: #6B717C; font-weight: 600; font-size: 1.9vw; text-align: center; }
+  .chip.on { background: #3A2E55; color: var(--text); } .chip.warn.on { background: var(--warn); color: #111; } .chip.bad.on { background: var(--bad); color: #111; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 1vw; font-size: 2.6vw; }
+  .row .num { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="wait" id="wait">Waiting for Elite Dangerous</div>
+<div class="col">
+  <div class="box"><div class="state" id="state">–</div><div class="legal" id="legal"></div></div>
+  <div class="box"><div class="lbl">Fuel</div><div class="big num" id="fuel">–<small>t</small></div><div class="lbl" style="margin-top:.6vw">Reservoir <span class="num" id="res">–</span></div></div>
+  <div class="box pips" aria-label="Power distribution">
+    <div class="pip" id="pSys"><span>SYS</span><i></i><i></i><i></i><i></i></div>
+    <div class="pip" id="pEng"><span>ENG</span><i></i><i></i><i></i><i></i></div>
+    <div class="pip" id="pWep"><span>WEP</span><i></i><i></i><i></i><i></i></div>
+  </div>
+</div>
+<div class="col">
+  <div class="chips" id="chips"></div>
+  <div class="box" style="display:flex;flex-direction:column;gap:.8vw">
+    <div class="row"><span class="lbl">Cargo</span><span class="num" id="cargo">–</span></div>
+    <div class="row"><span class="lbl">Credits</span><span class="num" id="bal">–</span></div>
+    <div class="row"><span class="lbl">Destination</span><span class="num" id="dest">–</span></div>
+    <div class="row" id="altRow" hidden><span class="lbl">Altitude</span><span class="num" id="alt">–</span></div>
+    <div class="row" id="hdgRow" hidden><span class="lbl">Heading</span><span class="num" id="hdg">–</span></div>
+  </div>
+</div>
+<script src="elite.js"></script>
+</body>
+</html>

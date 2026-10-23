@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'">
+<title>AC EVO dashboard</title>
+<link rel="stylesheet" href="panel.css">
+<style>
+  body { display: grid; grid-template-rows: 3.2vw 1fr; gap: 1.4vw; padding: 1.6vw; }
+  .rpm { position: relative; background: var(--panel); border-radius: 1vw; overflow: hidden; border: 0.15vw solid var(--line); }
+  .rpm i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--good); transition: width 90ms linear; }
+  .rpm.amber i { background: var(--warn); } .rpm.red i { background: var(--bad); }
+  .rpm.shift { animation: flash .25s steps(2) infinite; }
+  @keyframes flash { 50% { background: var(--bad); } }
+  .grid { display: grid; grid-template-columns: 1fr 1.35fr 1.15fr; gap: 1.4vw; min-height: 0; }
+  .col { display: flex; flex-direction: column; gap: 1.4vw; min-height: 0; }
+  .gear { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .gear b { font-size: 17vw; line-height: .9; font-family: var(--mono); font-weight: 500; }
+  .speed { font-size: 4.6vw; } .speed small { font-size: 1.8vw; color: var(--text-2); margin-left: .4vw; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 1vw; }
+  .row .num { font-size: 3.2vw; }
+  .delta { font-size: 6.4vw; text-align: center; }
+  .delta.good { color: var(--good); } .delta.bad { color: var(--bad); }
+  .tyres { display: grid; grid-template-columns: 1fr 1fr; gap: 1vw; flex: 1; }
+  .tyre { border-radius: 1vw; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #22252B; }
+  .tyre b { font-size: 3.6vw; font-family: var(--mono); font-weight: 500; } .tyre span { font-size: 1.9vw; color: #E5E7EB; }
+  .tyre.cold { background: #1D3350; } .tyre.ok { background: #1B3A2B; } .tyre.hot { background: #4A2020; }
+  .tyre.lock { outline: 0.5vw solid var(--bad); }
+  .chips { display: flex; gap: 1vw; }
+  .chip { flex: 1; text-align: center; padding: .8vw; border-radius: .8vw; background: #22252B; color: var(--text-2); font-weight: 600; font-size: 2vw; }
+  .chip.on { background: var(--warn); color: #111; }
+  .pedals { display: flex; gap: .8vw; height: 2.2vw; }
+  .pedals div { flex: 1; background: #22252B; border-radius: .5vw; overflow: hidden; } .pedals i { display: block; height: 100%; width: 0; }
+  #gas i { background: var(--good); } #brk i { background: var(--bad); }
+</style>
+</head>
+<body>
+<div class="wait" id="wait">Waiting for AC EVO</div>
+<div class="rpm" id="rpm"><i></i></div>
+<div class="grid">
+  <div class="col">
+    <div class="box gear"><span class="lbl">Gear</span><b id="gear">N</b><div class="speed num"><span id="speed">0</span><small>km/h</small></div></div>
+    <div class="chips"><div class="chip" id="tc">TC</div><div class="chip" id="abs">ABS</div></div>
+    <div class="pedals"><div id="gas"><i></i></div><div id="brk"><i></i></div></div>
+  </div>
+  <div class="col">
+    <div class="box"><div class="lbl">Delta</div><div class="delta num" id="delta">–</div></div>
+    <div class="box" style="display:flex;flex-direction:column;gap:.6vw">
+      <div class="row"><span class="lbl">Lap</span><span class="num" id="lapT">–</span></div>
+      <div class="row"><span class="lbl">Last</span><span class="num" id="last">–</span></div>
+      <div class="row"><span class="lbl">Best</span><span class="num" id="best">–</span></div>
+      <div class="row"><span class="lbl">Predicted</span><span class="num" id="pred">–</span></div>
+    </div>
+    <div class="box row"><span class="lbl">Position</span><span class="num" id="pos">–</span><span class="lbl">Lap</span><span class="num" id="lap">–</span></div>
+  </div>
+  <div class="col">
+    <div class="box" style="display:flex;flex-direction:column;gap:.6vw">
+      <div class="row"><span class="lbl">Fuel</span><span class="num" id="fuel">–</span></div>
+      <div class="row"><span class="lbl">Laps left</span><span class="num" id="fuelLaps">–</span></div>
+      <div class="row"><span class="lbl">Per lap</span><span class="num" id="fuelPer">–</span></div>
+    </div>
+    <div class="tyres" id="tyres"></div>
+  </div>
+</div>
+<script src="acevo.js"></script>
+</body>
+</html>

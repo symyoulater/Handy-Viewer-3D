@@ -1,0 +1,15 @@
+/* Shared look for the game-data panels shown in the headset. Sized in vw/vh so they fill the panel. */
+@font-face { font-family: "Inter"; font-weight: 400; src: url("../fonts/inter-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; src: url("../fonts/inter-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 500; src: url("../fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); }
+:root { --bg: #0D0E11; --panel: #16181D; --line: #2A2E35; --text: #F2F3F6; --text-2: #A9AFBA; --accent: #B794F6;
+        --good: #4CC38A; --warn: #E0A84B; --bad: #EF6F6C; --cold: #5B9BE6;
+        --mono: "JetBrains Mono", Consolas, monospace; --sans: Inter, "Segoe UI", sans-serif; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); overflow: hidden; }
+.wait { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+        font-size: 3.4vw; color: var(--text-2); padding: 4vw; background: var(--bg); z-index: 5; }
+.wait[hidden] { display: none; }
+.lbl { font-size: 1.7vw; letter-spacing: .12em; text-transform: uppercase; color: var(--text-2); font-weight: 600; }
+.num { font-family: var(--mono); font-weight: 500; }
+.box { background: var(--panel); border: 0.15vw solid var(--line); border-radius: 1.2vw; padding: 1.4vw 1.8vw; min-width: 0; }

@@ -234,7 +234,7 @@
   }
 
   // What a window shows: the real world (a passthrough cut-out) or a panel from the PC.
-  const SOURCES = [['', 'Real world (passthrough)'], ['window', 'A desktop window'], ['web', 'A web page'], ['pdf', 'A PDF'], ['camera', 'The camera']];
+  const SOURCES = [['', 'Real world (passthrough)'], ['window', 'A desktop window'], ['web', 'A web page'], ['pdf', 'A PDF'], ['camera', 'The camera'], ['data', 'Game data']];
   const DATA_PAGES = [['elite', 'Elite Dangerous status'], ['acevo', 'AC EVO dashboard']];
   function sourceFields(win) {
     const kind = win.source || '';
