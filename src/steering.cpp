@@ -209,7 +209,12 @@ void ReaderThread() {
             }
             lastSearch = now;
             if (FindDevice(dev)) {
-                g_askWorks = true;
+                // The Simucube 2 is known not to answer (it stalls for 5 s), so don't ask it at all.
+                {
+                    std::wstring lower = dev.name;
+                    for (auto& ch : lower) ch = towlower(ch);
+                    g_askWorks = lower.find(L"simucube") == std::wstring::npos;
+                }
                 {
                     std::lock_guard<std::mutex> lock(g_nameMutex);
                     g_deviceName = Narrow(dev.name);

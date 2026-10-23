@@ -37,7 +37,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.8.2"
+#define HV_VERSION "0.9.0"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -120,6 +120,8 @@ struct State {
     bool boardShowing = false;
     Pose boardPose;
     std::wstring boardKey;      // what the board currently shows; redrawn when it changes
+    DWORD boardDrawnAt = 0;
+    bool boardBring = false;    // B: move the panel back in front of you
     int selected = 0; // 0 = wheel, 1.. = rect windows
     DWORD highlightUntil = 0;
     bool loggedFirstFrame = false;
@@ -645,6 +647,34 @@ void DoAction(Action action, bool fine, XrTime displayTime) {
         case Action::PlaceInFront:
             PlaceSelectedInFront(displayTime);
             break;
+        case Action::BringBoard:
+            g.boardBring = true;
+            if (!g.boardShowing) { g.boardManual = true; g.boardHiddenInEdit = false; }
+            break;
+        case Action::ToggleWindow: {
+            if (g.selected == 0) { Log("The wheel window can't be switched off here - choose a rim in the app"); break; }
+            RectWindow& rw = g.cfg.windows[g.selected - 1];
+            rw.enabled = !rw.enabled;
+            Log("%s %s", rw.name.c_str(), rw.enabled ? "on" : "off");
+            Highlight();
+            MarkChanged();
+            break;
+        }
+        case Action::CycleShape: {
+            if (g.selected == 0) { Log("The wheel window's shape comes from the rim - press W for the next rim"); break; }
+            RectWindow& rw = g.cfg.windows[g.selected - 1];
+            const char* order[] = {"rect", "rounded", "ellipse", "custom"};
+            int n = rw.shapeFile.empty() ? 3 : 4, cur = 0;
+            for (int k = 0; k < n; ++k) if (rw.shape == order[k]) cur = k;
+            rw.shape = order[(cur + 1) % n];
+            Window& w = g.rects[g.selected - 1];
+            w.shape = WindowShape(rw);
+            Rasterise(w);
+            Log("%s shape: %s", rw.name.c_str(), rw.shape.c_str());
+            Highlight();
+            MarkChanged();
+            break;
+        }
         default:
             if (!p) break;
             switch (action) {
@@ -704,19 +734,82 @@ void HandleHotkeys(XrTime displayTime) {
 XrPosef ToXrPose(const Pose& p, float spinDeg);
 XrCompositionLayerQuad MakeQuad(const Window& w, const XrPosef& pose);
 
-std::wstring BoardText() {
-    std::wstring sel = Widen(SelectedName());
+// Everything the setup panel shows, as text. The panel is redrawn only when this changes.
+struct PanelRow {
+    std::wstring name, info;
+    bool selected = false, dim = false;
+};
+
+std::wstring Deg(float d) {
+    wchar_t b[32];
+    swprintf(b, 32, L"%.0f\x00B0", std::fabs(d) < 0.5f ? 0.0f : d);
+    return b;
+}
+
+std::vector<PanelRow> PanelRows() {
+    std::vector<PanelRow> rows;
+    WheelProfile* wp = ActiveWheel();
+    PanelRow wr;
+    wr.name = L"Wheel";
+    if (wp) {
+        wchar_t b[96];
+        swprintf(b, 96, L"%ls \x00B7 %.0f%%", Widen(wp->name).c_str(), std::clamp(wp->scale, 0.5f, 2.0f) * 100.0f);
+        wr.info = b;
+    } else {
+        wr.info = L"no rim chosen";
+        wr.dim = true;
+    }
+    wr.selected = g.selected == 0;
+    rows.push_back(wr);
+    for (size_t i = 0; i < g.cfg.windows.size(); ++i) {
+        const RectWindow& rw = g.cfg.windows[i];
+        PanelRow r;
+        r.name = Widen(rw.name);
+        if (!rw.enabled) {
+            r.info = L"off";
+            r.dim = true;
+        } else {
+            wchar_t b[96];
+            swprintf(b, 96, L"%.0f \x00D7 %.0f mm \x00B7 %ls%ls", rw.widthMm, rw.heightMm, Widen(rw.shape).c_str(),
+                     rw.onlyWhileAdjusting ? L" \x00B7 editing only" : L"");
+            r.info = b;
+        }
+        r.selected = g.selected == (int)i + 1;
+        rows.push_back(r);
+    }
+    return rows;
+}
+
+// One line about the selected window's position: distance from your head and its angles.
+std::wstring SelectedDetail(const XrSpaceLocation* head) {
+    Pose* p = SelectedPose();
+    if (!p) return L"";
     std::wstring t;
-    t += L"Selected:  " + sel + L"\n";
-    t += InEditMode() ? L"Edit mode:  ON  (Esc to finish)\n" : L"Edit mode:  off  (Ctrl+Alt+H)\n";
-    t += g.cfg.enabled ? L"Windows:  shown\n" : L"Windows:  hidden  (Ctrl+Alt+V)\n";
+    if (head && (head->locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT)) {
+        float dx = p->position[0] - head->pose.position.x, dy = p->position[1] - head->pose.position.y,
+              dz = p->position[2] - head->pose.position.z;
+        wchar_t b[48];
+        swprintf(b, 48, L"%.0f cm away   ", std::sqrt(dx * dx + dy * dy + dz * dz) * 100.0f);
+        t += b;
+    }
+    t += L"tilt " + Deg(p->pitch) + L"   turn " + Deg(p->yaw) + L"   roll " + Deg(p->roll);
     return t;
 }
 
-// Draws the board with Windows' own text drawing, then copies it into the window's pixels.
-void RenderBoard(Window& w, const std::wstring& status) {
-    const int W = 560, H = 600;
-    const float mmW = 210.0f, mmH = 225.0f;
+std::wstring SteeringLine() {
+    float v = 0;
+    std::string base = GetSteeringDeviceName();
+    if (!GetSteeringNormalised(v)) return base.empty() ? L"Wheel base: not found" : L"Wheel base: " + Widen(base) + L" (turn the wheel)";
+    float a = v * g.cfg.steering.rangeDeg * 0.5f;
+    if (g.cfg.steering.invert) a = -a;
+    a -= g.cfg.steering.centreOffsetDeg;
+    return L"Wheel base: " + Widen(base) + L"   " + Deg(std::round(a / 2.0f) * 2.0f);
+}
+
+// Draws the setup panel with Windows' own text drawing, then copies it into the window's pixels.
+void RenderBoard(Window& w, const XrSpaceLocation* head) {
+    const int W = 640, H = 780;
+    const float mmW = 220.0f, mmH = 268.0f;
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
     bi.bmiHeader.biWidth = W;
@@ -729,6 +822,8 @@ void RenderBoard(Window& w, const std::wstring& status) {
     if (!bmp || !bits) { if (bmp) DeleteObject(bmp); DeleteDC(dc); return; }
     HGDIOBJ old = SelectObject(dc, bmp);
 
+    const COLORREF text = RGB(236, 238, 242), text2 = RGB(169, 175, 186), text3 = RGB(120, 127, 139),
+                   accent = RGB(183, 148, 246), amber = RGB(240, 200, 90), lineCol = RGB(48, 52, 60);
     RECT all{0, 0, W, H};
     HBRUSH bg = CreateSolidBrush(RGB(21, 23, 28));
     FillRect(dc, &all, bg);
@@ -737,59 +832,96 @@ void RenderBoard(Window& w, const std::wstring& status) {
     auto font = [&](int px, int weight, const wchar_t* face) {
         return CreateFontW(-px, 0, 0, 0, weight, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, face);
     };
-    HFONT title = font(30, FW_SEMIBOLD, L"Segoe UI"), body = font(21, FW_NORMAL, L"Segoe UI"),
-          keyf = font(20, FW_SEMIBOLD, L"Consolas"), smallFont = font(17, FW_NORMAL, L"Segoe UI");
-
-    int y = 22;
-    SelectObject(dc, title);
-    SetTextColor(dc, RGB(236, 238, 242));
-    RECT r{28, y, W - 28, y + 40};
-    DrawTextW(dc, L"Thin Place VR", -1, &r, DT_LEFT | DT_SINGLELINE);
-    y += 50;
-
-    SelectObject(dc, body);
-    SetTextColor(dc, RGB(240, 200, 90));
-    r = {28, y, W - 28, y + 100};
-    DrawTextW(dc, status.c_str(), -1, &r, DT_LEFT | DT_WORDBREAK);
-    y += 96;
-
-    HPEN pen = CreatePen(PS_SOLID, 1, RGB(48, 52, 60));
+    HFONT title = font(30, FW_SEMIBOLD, L"Segoe UI"), head2 = font(17, FW_SEMIBOLD, L"Segoe UI"),
+          body = font(21, FW_NORMAL, L"Segoe UI"), bodyB = font(21, FW_SEMIBOLD, L"Segoe UI"),
+          keyf = font(19, FW_SEMIBOLD, L"Consolas"), smallFont = font(17, FW_NORMAL, L"Segoe UI");
+    HPEN pen = CreatePen(PS_SOLID, 1, lineCol);
     SelectObject(dc, pen);
-    MoveToEx(dc, 28, y, nullptr);
-    LineTo(dc, W - 28, y);
+    auto rule = [&](int y) { MoveToEx(dc, 28, y, nullptr); LineTo(dc, W - 28, y); };
+    auto put = [&](HFONT f, COLORREF c, int x0, int y0, int x1, int y1, const std::wstring& str, UINT fmt) {
+        SelectObject(dc, f);
+        SetTextColor(dc, c);
+        RECT r{x0, y0, x1, y1};
+        DrawTextW(dc, str.c_str(), -1, &r, fmt | DT_NOPREFIX);
+    };
+    const UINT one = DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS;
+
+    // Header
+    int y = 20;
+    put(title, text, 28, y, W - 28, y + 40, L"Thin Place VR", one);
+    if (InEditMode()) {
+        RECT pill{W - 168, y + 4, W - 28, y + 36};
+        HBRUSH pb = CreateSolidBrush(RGB(58, 46, 84));
+        HGDIOBJ ob = SelectObject(dc, pb);
+        HGDIOBJ op = SelectObject(dc, GetStockObject(NULL_PEN));
+        RoundRect(dc, pill.left, pill.top, pill.right, pill.bottom, 16, 16);
+        SelectObject(dc, op);
+        SelectObject(dc, ob);
+        DeleteObject(pb);
+        put(head2, accent, pill.left, pill.top + 6, pill.right, pill.bottom, L"EDITING", DT_CENTER | DT_SINGLELINE);
+    } else {
+        put(head2, text3, W - 220, y + 10, W - 28, y + 36, L"Ctrl+Alt+H to edit", DT_RIGHT | DT_SINGLELINE);
+    }
+    y += 52;
+    if (!g.cfg.enabled) {
+        put(body, amber, 28, y, W - 28, y + 28, L"Windows are hidden (Ctrl+Alt+V)", one);
+        y += 34;
+    }
+
+    // Windows
+    put(head2, text3, 28, y, W - 28, y + 22, L"WINDOWS  \x00B7  Tab selects", one);
+    y += 28;
+    for (const PanelRow& r : PanelRows()) {
+        if (y > 330) { put(smallFont, text3, 28, y, W - 28, y + 22, L"\x2026 more in the app", one); y += 26; break; }
+        if (r.selected) {
+            RECT hl{20, y - 3, W - 20, y + 31};
+            HBRUSH hb = CreateSolidBrush(RGB(36, 32, 48));
+            FillRect(dc, &hl, hb);
+            DeleteObject(hb);
+            put(bodyB, accent, 28, y, 48, y + 30, L"\x25B6", one);
+        }
+        put(r.selected ? bodyB : body, r.selected ? text : (r.dim ? text3 : text), 52, y, 250, y + 30, r.name, one);
+        put(body, r.dim ? text3 : text2, 256, y, W - 28, y + 30, r.info, one);
+        y += 36;
+    }
+    y += 4;
+    put(smallFont, text2, 52, y, W - 28, y + 24, SelectedDetail(head), one);
+    y += 34;
+    rule(y);
+    y += 12;
+
+    // Steering
+    put(body, text2, 28, y, W - 28, y + 28, SteeringLine(), one);
+    y += 38;
+    rule(y);
     y += 14;
 
-    const wchar_t* rows[][2] = {
-        {L"Ctrl+Alt+H", L"edit mode on / off"},
-        {L"Ctrl+Alt+V", L"show / hide windows"},
-        {L"Ctrl+Alt+K", L"this board"},
-        {L"P", L"place where you look"},
-        {L"Tab", L"next window"},
-        {L"\x2190 \x2191 \x2192 \x2193", L"move"},
-        {L"R / F", L"away / closer"},
-        {L"T G  Q E  Z C", L"tilt  turn  roll"},
-        {L"= / \x2212", L"bigger / smaller"},
-        {L"W   X   I", L"rim  centre  flip"},
-        {L"Shift", L"fine steps"},
+    // Keys
+    put(head2, text3, 28, y, W - 28, y + 22, InEditMode() ? L"KEYS" : L"KEYS  \x00B7  in edit mode", one);
+    y += 30;
+    const wchar_t* keys[][2] = {
+        {L"P", L"place where you look"},  {L"Tab", L"next window"},
+        {L"\x2190\x2191\x2192\x2193", L"move"},       {L"R  F", L"away  closer"},
+        {L"T  G", L"tilt"},               {L"Q  E", L"turn"},
+        {L"Z  C", L"roll"},               {L"=  \x2212", L"bigger  smaller"},
+        {L"O", L"window on / off"},       {L"S", L"change shape"},
+        {L"W", L"next rim"},              {L"X", L"centre steering"},
+        {L"I", L"flip steering"},         {L"B", L"bring this panel"},
     };
-    for (auto& row : rows) {
-        SelectObject(dc, keyf);
-        SetTextColor(dc, RGB(236, 238, 242));
-        r = {28, y, 210, y + 30};
-        DrawTextW(dc, row[0], -1, &r, DT_LEFT | DT_SINGLELINE);
-        SelectObject(dc, body);
-        SetTextColor(dc, RGB(169, 175, 186));
-        r = {220, y, W - 28, y + 30};
-        DrawTextW(dc, row[1], -1, &r, DT_LEFT | DT_SINGLELINE);
-        y += 31;
+    const int colW = (W - 56) / 2;
+    for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i) {
+        int x = 28 + (int)(i % 2) * colW;
+        int yy = y + (int)(i / 2) * 32;
+        put(keyf, text, x, yy + 1, x + 78, yy + 30, keys[i][0], one);
+        put(body, text2, x + 84, yy, x + colW - 8, yy + 30, keys[i][1], one);
     }
-    SelectObject(dc, smallFont);
-    SetTextColor(dc, RGB(142, 149, 161));
-    r = {28, H - 34, W - 28, H - 10};
-    DrawTextW(dc, L"Edit-mode keys work while edit mode is on.", -1, &r, DT_LEFT | DT_SINGLELINE);
+    y += 7 * 32 + 6;
+    rule(y);
+    y += 12;
+    put(smallFont, text3, 28, y, W - 28, y + 24, L"Shift = fine steps   \x00B7   Esc = finish   \x00B7   Ctrl+Alt+K = hide", one);
 
     GdiFlush();
-    // Copy out: GDI leaves alpha at 0, so make the board solid with slightly rounded corners.
+    // Copy out: GDI leaves alpha at 0, so make the panel solid with slightly rounded corners.
     w.texW = W;
     w.texH = H;
     w.halfWmm = mmW / 2;
@@ -802,19 +934,28 @@ void RenderBoard(Window& w, const std::wstring& status) {
             int cx = px < rad ? rad - px : px >= W - rad ? px - (W - rad - 1) : 0;
             int cy = py < rad ? rad - py : py >= H - rad ? py - (H - rad - 1) : 0;
             if (cx * cx + cy * cy > rad * rad) continue; // outside a rounded corner: clear
-            const uint8_t* s = src + ((size_t)py * W + px) * 4; // B G R x
+            const uint8_t* sp = src + ((size_t)py * W + px) * 4; // B G R x
             uint8_t* d = &w.pixels[((size_t)py * W + px) * 4];
-            if (g.bgra) { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; }
-            else { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; }
+            if (g.bgra) { d[0] = sp[0]; d[1] = sp[1]; d[2] = sp[2]; }
+            else { d[0] = sp[2]; d[1] = sp[1]; d[2] = sp[0]; }
             d[3] = 242;
         }
     w.needsUpload = true;
 
     SelectObject(dc, old);
     DeleteObject(pen);
-    for (HFONT f : {title, body, keyf, smallFont}) DeleteObject(f);
+    for (HFONT f : {title, head2, body, bodyB, keyf, smallFont}) DeleteObject(f);
     DeleteObject(bmp);
     DeleteDC(dc);
+}
+
+// A summary of what the panel shows, to tell when it needs redrawing.
+std::wstring PanelKey(const XrSpaceLocation* head) {
+    std::wstring k = InEditMode() ? L"E" : L"-";
+    k += g.cfg.enabled ? L"1" : L"0";
+    for (const PanelRow& r : PanelRows()) k += r.name + L"|" + r.info + (r.selected ? L"*" : L"") + L"\n";
+    k += SelectedDetail(head) + L"\n" + SteeringLine();
+    return k;
 }
 
 // Shows the board in front of you when it's switched on or edit mode starts; it then stays put.
@@ -824,11 +965,11 @@ bool BoardFrame(XrTime displayTime, XrCompositionLayerQuad& out) {
         g.boardShowing = false;
         return false;
     }
-    if (!g.boardShowing) {
-        XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
-        if (XR_FAILED(next.LocateSpace(g.viewSpace, g.baseSpace, displayTime, &loc)) ||
-            !(loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT))
-            return false;
+    XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
+    bool haveHead = XR_SUCCEEDED(next.LocateSpace(g.viewSpace, g.baseSpace, displayTime, &loc)) &&
+                    (loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT);
+    if (!g.boardShowing || g.boardBring) {
+        if (!haveHead) return false;
         // Half a metre ahead, a little to the left and below eye level, facing you.
         float yaw = 0, pitch = 0;
         ForwardYawPitch(loc.pose.orientation, yaw, pitch);
@@ -839,12 +980,18 @@ bool BoardFrame(XrTime displayTime, XrCompositionLayerQuad& out) {
         g.boardPose.pitch = -12.0f;
         g.boardPose.roll = 0;
         g.boardShowing = true;
+        g.boardBring = false;
         g.boardKey.clear();
     }
-    std::wstring status = BoardText();
-    if (status != g.boardKey || g.board.texW == 0) {
-        RenderBoard(g.board, status);
-        g.boardKey = status;
+    // Redraw when anything shown changes, at most ten times a second.
+    DWORD now = GetTickCount();
+    if (g.board.texW == 0 || now - g.boardDrawnAt >= 100) {
+        std::wstring key = PanelKey(haveHead ? &loc : nullptr);
+        if (key != g.boardKey || g.board.texW == 0) {
+            RenderBoard(g.board, haveHead ? &loc : nullptr);
+            g.boardKey = key;
+            g.boardDrawnAt = now;
+        }
     }
     if (g.board.needsUpload && !Upload(g.board)) return false;
     out = MakeQuad(g.board, ToXrPose(g.boardPose, 0.0f));
@@ -1153,7 +1300,7 @@ XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* inf
         }
 
         if (nq < 16 && BoardFrame(info->displayTime, quads[nq])) {
-            g.board.label = "Help board";
+            g.board.label = "Setup panel";
             ++nq;
         }
 

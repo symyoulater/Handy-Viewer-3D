@@ -26,7 +26,10 @@ enum class Action : int {
     RollLeft = 19, RollRight = 20,                            // Z / C
     Bigger = 21, Smaller = 22,                                // = / -
     Select = 23,         // app only: select the target window and outline it
-    ToggleBoard = 24,    // Ctrl+Alt+K (any time): help board in the headset
+    ToggleBoard = 24,    // Ctrl+Alt+K (any time): setup panel in the headset
+    ToggleWindow = 25,   // O: selected window on / off
+    CycleShape = 26,     // S: selected window's shape
+    BringBoard = 27,     // B: move the setup panel back in front of you
 };
 
 void StartHotkeys();

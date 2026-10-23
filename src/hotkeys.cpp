@@ -34,6 +34,9 @@ Action EditAction(DWORD vk) {
     switch (vk) {
     case VK_TAB: return Action::SelectNext;
     case 'P': return Action::PlaceInFront;
+    case 'O': return Action::ToggleWindow;
+    case 'S': return Action::CycleShape;
+    case 'B': return Action::BringBoard;
     case 'W': return Action::NextWheel;
     case 'X': return Action::CentreSteering;
     case 'I': return Action::InvertSteering;
