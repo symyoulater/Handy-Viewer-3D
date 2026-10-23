@@ -19,6 +19,7 @@
 #include <openxr/openxr_loader_negotiation.h>
 
 #include <algorithm>
+#include <initializer_list>
 #include <cmath>
 #include <cstring>
 #include <string>
@@ -737,7 +738,7 @@ void RenderBoard(Window& w, const std::wstring& status) {
         return CreateFontW(-px, 0, 0, 0, weight, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, face);
     };
     HFONT title = font(30, FW_SEMIBOLD, L"Segoe UI"), body = font(21, FW_NORMAL, L"Segoe UI"),
-          keyf = font(20, FW_SEMIBOLD, L"Consolas"), small = font(17, FW_NORMAL, L"Segoe UI");
+          keyf = font(20, FW_SEMIBOLD, L"Consolas"), smallFont = font(17, FW_NORMAL, L"Segoe UI");
 
     int y = 22;
     SelectObject(dc, title);
@@ -782,7 +783,7 @@ void RenderBoard(Window& w, const std::wstring& status) {
         DrawTextW(dc, row[1], -1, &r, DT_LEFT | DT_SINGLELINE);
         y += 31;
     }
-    SelectObject(dc, small);
+    SelectObject(dc, smallFont);
     SetTextColor(dc, RGB(142, 149, 161));
     r = {28, H - 34, W - 28, H - 10};
     DrawTextW(dc, L"Edit-mode keys work while edit mode is on.", -1, &r, DT_LEFT | DT_SINGLELINE);
@@ -811,7 +812,7 @@ void RenderBoard(Window& w, const std::wstring& status) {
 
     SelectObject(dc, old);
     DeleteObject(pen);
-    for (HFONT f : {title, body, keyf, small}) DeleteObject(f);
+    for (HFONT f : {title, body, keyf, smallFont}) DeleteObject(f);
     DeleteObject(bmp);
     DeleteDC(dc);
 }
