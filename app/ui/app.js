@@ -227,11 +227,12 @@
             ${rimSvg(w.shape, { colour: w.id === c.activeWheel ? 'var(--accent)' : '#5A606B', fill: w.id === c.activeWheel ? 0.18 : 0 })}
             <span style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:500">${esc(w.name)}</span>${w.id === c.activeWheel ? '<span class="muted" style="color:var(--accent)">In use</span>' : ''}</span>
             <span class="muted">${w.rotates ? 'Turns with the wheel' : 'Round rim — no turning needed'} · size ${w.scale}%</span>
+            ${w.userAdded ? `<span class="linkbtn" role="button" tabindex="0" data-act="removeRim" data-id="${esc(w.id)}" style="align-self:flex-start;color:var(--text-3)">Remove</span>` : ''}
           </button>`).join('')}
-          <div class="rim" style="border-style:dashed;align-items:center;justify-content:center;text-align:center">
+          <button class="rim" data-act="addRim" style="border-style:dashed;align-items:center;justify-content:center;text-align:center">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-2)" stroke-width="1.6" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            <span style="color:var(--text-2)">Add a rim</span><span class="muted">Send Claude a front-on photo of the rim and it will be added in an update.</span>
-          </div>
+            <span style="color:var(--text-2)">Add a rim</span><span class="muted">From a front-on photo — a cut-out or plain background works best</span>
+          </button>
         </div>
       </section>
       <div class="grid2">
@@ -468,6 +469,13 @@
         }
         break;
       case 'rim': send('set', { key: 'activeWheel', value: b.dataset.id }); break;
+      case 'addRim': addRim(); break;
+      case 'removeRim': {
+        e.stopPropagation();
+        const w = cfg().wheels.find((x) => x.id === b.dataset.id);
+        if (w && confirm(`Remove the “${w.name}” rim?`)) send('removeRim', { id: w.id });
+        break;
+      }
       case 'addWindow': {
         const c = cfg();
         if (!c) return;
@@ -499,6 +507,63 @@
       case 'openFolder': send('openFolder'); break;
     }
   });
+
+  // ------------------------------------------------------------- add a rim ----
+  async function addRim() {
+    if (!cfg()) return;
+    const r = await send('traceRim');
+    if (!r.ok || !r.data) return; // cancelled, or an error already shown
+    const d = r.data;
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="rim-t">
+        <h2 id="rim-t">New rim</h2>
+        <p class="muted" style="margin:0">Check the outline follows the rim. If it doesn't, try a photo with a plainer background.</p>
+        <div class="photo"><svg viewBox="0 0 ${d.width} ${d.height}" aria-label="Photo with traced outline" role="img">
+          <image href="${d.image}" width="${d.width}" height="${d.height}"/>
+          <polygon points="${d.outline}" fill="rgba(183,148,246,.25)" stroke="#E25CE2" stroke-width="${Math.max(2, d.width / 300)}"/>
+          <line id="hubline" x1="0" x2="${d.width}" stroke="#ECEEF2" stroke-dasharray="6 6" stroke-width="${Math.max(1, d.width / 600)}"/>
+        </svg></div>
+        <div class="field"><label for="rname">Name</label><input id="rname" class="text-in" style="max-width:260px" value="${esc(d.name)}"></div>
+        <div class="field"><label class="lbl" for="rwidth"><span>Width</span><span class="muted">Across the widest point, from the maker's specs</span></label>
+          <span style="display:flex;align-items:center;gap:6px"><input id="rwidth" class="num-in" type="number" min="150" max="450" value="300"><span class="muted">mm</span></span></div>
+        <div class="field"><label class="lbl" for="rhub"><span>Hub height</span><span class="muted">Dashed line: where the wheel turns. Move it to the centre of the quick release</span></label>
+          <span style="display:flex;align-items:center;gap:6px"><input id="rhub" class="num-in" type="number" min="-80" max="80" step="1" value="0"><span class="muted">mm up</span></span></div>
+        <div class="field"><span>Turns with the wheel</span>${sw('rrot', Math.abs(d.boundsW - d.boundsH) / d.boundsW > 0.08, '')}</div>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button class="btn ghost" data-m="cancel">Cancel</button>
+          <button class="btn primary" data-m="save">Add rim</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const $ = (sel) => modal.querySelector(sel);
+    // The turning point starts at the middle of the outline; "Hub height" moves it up or down.
+    const ys = d.outline.split(' ').map((p) => +p.split(',')[1]);
+    const mid = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const hubLine = () => {
+      const pxPerMm = d.boundsW / (parseFloat($('#rwidth').value) || 300);
+      const y = mid - (parseFloat($('#rhub').value) || 0) * pxPerMm;
+      $('#hubline').setAttribute('y1', y);
+      $('#hubline').setAttribute('y2', y);
+    };
+    hubLine();
+    $('#rhub').addEventListener('input', hubLine);
+    $('#rwidth').addEventListener('input', hubLine);
+    $('#rname').focus();
+    modal.addEventListener('click', async (ev) => {
+      const m = ev.target.closest('[data-m]');
+      if (ev.target === modal || (m && m.dataset.m === 'cancel')) { modal.remove(); return; }
+      if (m && m.dataset.m === 'save') {
+        const res = await send('saveRim', {
+          name: $('#rname').value, widthMm: parseFloat($('#rwidth').value),
+          hubUpMm: parseFloat($('#rhub').value) || 0, rotates: $('#rrot').checked,
+        });
+        if (res.ok) { modal.remove(); toast('Rim added and selected. Place it from the Windows page.'); }
+      }
+    });
+    modal.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') modal.remove(); });
+  }
 
   // Settings: switches and sliders save on change; number boxes on Enter or leaving the box.
   main.addEventListener('change', (e) => {

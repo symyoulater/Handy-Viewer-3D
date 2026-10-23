@@ -27,6 +27,7 @@ struct WheelProfile {
     std::string name;
     std::string shapeFile;           // file in the shapes folder
     float scale = 1.0f;              // size adjustment (1.0 = real size)
+    bool userAdded = false;          // added from a photo in the app (can be removed there)
     bool rotates = true;             // follow the steering angle
     std::array<float, 2> hubOffsetMm{0.0f, 0.0f}; // where the hub sits within the shape
     Pose pose;

@@ -27,6 +27,8 @@ namespace ThinPlaceVR
         private readonly FileSystemWatcher _watcher = new FileSystemWatcher();
 
         private UpdateInfo _latest;
+        private object _replyData;          // extra data a command hands back to the interface
+        private TraceResult _pendingRim;    // traced outline waiting for a name and width
         private string _updateState = "idle", _updateMessage = "";
         private int _updateProgress;
 
@@ -108,6 +110,7 @@ namespace ThinPlaceVR
                 ["scale"] = Math.Round(ConfigStore.Num(w, "scale", 1.0) * 100),
                 ["rotates"] = ConfigStore.Bool(w, "rotates", true),
                 ["shape"] = ShapePath(ConfigStore.Str(w, "shape_file", "")),
+                ["userAdded"] = ConfigStore.Bool(w, "user_added", false),
             }).ToList();
             var windows = ConfigStore.List(cfg, "windows").OfType<Dictionary<string, object>>().Select(w => new Dictionary<string, object>
             {
@@ -261,7 +264,8 @@ namespace ThinPlaceVR
                 error = ex.Message;
                 Updater.Log("Command " + cmd + " failed: " + ex);
             }
-            Post(new Dictionary<string, object> { ["type"] = "reply", ["id"] = id, ["ok"] = error == null, ["error"] = error });
+            Post(new Dictionary<string, object> { ["type"] = "reply", ["id"] = id, ["ok"] = error == null, ["error"] = error, ["data"] = _replyData });
+            _replyData = null;
             if (cmd != "action") PushState();
         }
 
@@ -389,6 +393,62 @@ namespace ThinPlaceVR
                     return null;
                 }
 
+                case "traceRim":
+                {
+                    string file;
+                    using (var dlg = new OpenFileDialog
+                    {
+                        Title = "Choose a front-on photo of the rim",
+                        Filter = "Pictures|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*",
+                    })
+                    {
+                        if (dlg.ShowDialog(_form) != DialogResult.OK) return null;
+                        file = dlg.FileName;
+                    }
+                    _pendingRim = Tracer.Trace(file);
+                    var r = _pendingRim;
+                    _replyData = new Dictionary<string, object>
+                    {
+                        ["image"] = r.ThumbnailDataUrl,
+                        ["width"] = r.Width,
+                        ["height"] = r.Height,
+                        ["outline"] = string.Join(" ", r.Outline.Select(p => ((int)p.X) + "," + ((int)p.Y))),
+                        ["boundsW"] = r.Bounds.Width,
+                        ["boundsH"] = r.Bounds.Height,
+                        ["name"] = Path.GetFileNameWithoutExtension(file),
+                    };
+                    return null;
+                }
+
+                case "saveRim":
+                {
+                    if (_pendingRim == null) return "Choose a photo first.";
+                    string name = ConfigStore.Str(a, "name", "").Trim();
+                    if (name.Length == 0) return "Give the rim a name.";
+                    double widthMm = Clamp(a.TryGetValue("widthMm", out object wv) ? wv : 300, 150, 450);
+                    double hubUpMm = ConfigStore.Num(a, "hubUpMm", 0);
+                    bool rotates = ConfigStore.Bool(a, "rotates", true);
+                    SaveRim(name, widthMm, hubUpMm, rotates);
+                    _pendingRim = null;
+                    return null;
+                }
+
+                case "removeRim":
+                {
+                    string rid = ConfigStore.Str(a, "id", "");
+                    Save(cfg =>
+                    {
+                        var wheels = ConfigStore.List(cfg, "wheels");
+                        var w = wheels.OfType<Dictionary<string, object>>().FirstOrDefault(x => ConfigStore.Str(x, "id", "") == rid);
+                        if (w == null) return;
+                        if (!ConfigStore.Bool(w, "user_added", false)) throw new Exception("Built-in rims can't be removed.");
+                        wheels.Remove(w);
+                        if (ConfigStore.Str(cfg, "active_wheel", "") == rid)
+                            cfg["active_wheel"] = wheels.Count > 0 ? ConfigStore.Str((Dictionary<string, object>)wheels[0], "id", "") : "";
+                    });
+                    return null;
+                }
+
                 case "openLog": return Open(Paths.LogFile, "There's no log yet. It appears after the first drive.");
                 case "openFolder":
                     Directory.CreateDirectory(Paths.DataDir);
@@ -413,6 +473,63 @@ namespace ThinPlaceVR
                 default:
                     return "Unknown command " + cmd;
             }
+        }
+
+        // Turn the traced outline into a shape file (millimetres, centred on the hub) and add it as a rim.
+        private void SaveRim(string name, double widthMm, double hubUpMm, bool rotates)
+        {
+            var r = _pendingRim;
+            double s = widthMm / r.Bounds.Width;
+            double cx = r.Bounds.Left + r.Bounds.Width / 2, cy = r.Bounds.Top + r.Bounds.Height / 2;
+            var outline = new ArrayList();
+            foreach (var p in r.Outline)
+                outline.Add(new ArrayList { Math.Round((p.X - cx) * s, 1), Math.Round((cy - p.Y) * s - hubUpMm, 1) });
+
+            string slug = new string(name.ToLowerInvariant().Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray()).Trim('-');
+            if (slug.Length == 0) slug = "rim";
+            string id = "user-" + slug;
+            var cfgNow = ConfigStore.Load();
+            var taken = new HashSet<string>(ConfigStore.List(cfgNow, "wheels").OfType<Dictionary<string, object>>().Select(w => ConfigStore.Str(w, "id", "")));
+            for (int n = 2; taken.Contains(id); n++) id = "user-" + slug + "-" + n;
+
+            string shapeFile = id + ".json";
+            string dir = Path.Combine(Paths.DataDir, "shapes");
+            Directory.CreateDirectory(dir);
+            var shape = new Dictionary<string, object>
+            {
+                ["name"] = name,
+                ["source"] = "traced from a photo in the Thin Place VR app",
+                ["width_mm"] = widthMm,
+                ["height_mm"] = Math.Round(r.Bounds.Height * s, 1),
+                ["origin"] = "wheel hub (rotation centre)",
+                ["outline_mm"] = outline,
+            };
+            File.WriteAllText(Path.Combine(dir, shapeFile), _json.Serialize(shape));
+            ShapeCache.Remove(shapeFile);
+
+            Save(cfg =>
+            {
+                var wheels = ConfigStore.List(cfg, "wheels");
+                // Start the new rim where the current one is, so it's roughly in place already.
+                object pose = null;
+                string active = ConfigStore.Str(cfg, "active_wheel", "");
+                var current = wheels.OfType<Dictionary<string, object>>().FirstOrDefault(w => ConfigStore.Str(w, "id", "") == active);
+                if (current != null && current.TryGetValue("pose", out object cp)) pose = _json.DeserializeObject(_json.Serialize(cp));
+                var entry = new Dictionary<string, object>
+                {
+                    ["id"] = id,
+                    ["name"] = name,
+                    ["shape_file"] = shapeFile,
+                    ["scale"] = 1.0,
+                    ["rotates"] = rotates,
+                    ["hub_offset_mm"] = new ArrayList { 0.0, 0.0 },
+                    ["user_added"] = true,
+                };
+                if (pose != null) entry["pose"] = pose;
+                wheels.Add(entry);
+                cfg["active_wheel"] = id;
+            });
+            Updater.Log("Added rim " + name + " (" + r.Outline.Count + " points, " + widthMm + " mm wide)");
         }
 
         private static double Clamp(object v, double min, double max)

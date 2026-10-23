@@ -94,6 +94,7 @@ bool SaveConfig(const Config& c) {
                           {"name", w.name},
                           {"shape_file", w.shapeFile},
                           {"scale", w.scale},
+                          {"user_added", w.userAdded},
                           {"rotates", w.rotates},
                           {"hub_offset_mm", {w.hubOffsetMm[0], w.hubOffsetMm[1]}},
                           {"pose", PoseToJson(w.pose)}});
@@ -165,6 +166,7 @@ bool LoadConfig(Config& c) {
                 p.name = w.value("name", p.id);
                 p.shapeFile = w.value("shape_file", std::string());
                 p.scale = w.value("scale", 1.0f);
+                p.userAdded = w.value("user_added", false);
                 p.rotates = w.value("rotates", true);
                 if (w.contains("hub_offset_mm") && w["hub_offset_mm"].size() == 2) {
                     p.hubOffsetMm[0] = w["hub_offset_mm"][0].get<float>();

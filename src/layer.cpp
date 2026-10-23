@@ -36,7 +36,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.4.2"
+#define HV_VERSION "0.4.3"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {

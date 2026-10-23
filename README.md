@@ -6,7 +6,7 @@
 
 Thin Place VR adds flat "windows" to any OpenXR game, filled with Virtual Desktop's chroma-key colour (magenta). Virtual Desktop replaces that colour with the Quest 3's passthrough cameras, so your real kit shows through exactly where it sits. The wheel window turns with your Simucube, so it hugs the rim at any steering angle.
 
-**Version 0.4.2** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
+**Version 0.4.3** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
 
 ---
 
@@ -39,7 +39,7 @@ Open **Thin Place VR** from the Start menu or desktop.
 
 - **Home** — whether everything is ready: the VR layer, the runtime, your wheel base and live steering, your windows, and recent games.
 - **Windows** — pick a window, then **Place where I'm looking**, nudge, tilt, turn and roll it while a game is running. You can click these from Virtual Desktop's desktop view without taking the headset off. Add, rename, resize, hide or remove windows here too.
-- **Wheel** — choose the fitted rim, set the steering range and direction, watch the live angle and set the centre.
+- **Wheel** — choose the fitted rim, set the steering range and direction, watch the live angle and set the centre. **Add a rim** traces a new rim's outline from a front-on photo: give it a name, its width in mm, and where its hub is.
 - **Passthrough** — the key colour, a Virtual Desktop checklist, step sizes, and troubleshooting tools.
 - **Updates** — the panel in the bottom-left corner checks for new versions and installs them.
 

@@ -140,3 +140,9 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 @media (max-width: 1080px) {
   .split, .split-r, .grid2 { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---- dialogs ---- */
+.modal { position: fixed; inset: 0; background: rgba(5,6,8,.72); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 10; }
+.dialog { width: min(640px, 100%); max-height: 100%; overflow-y: auto; background: var(--panel); border: 1px solid var(--line-2); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.photo { background: #0A0B0D; border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; justify-content: center; }
+.photo svg { width: 100%; max-height: 300px; }
