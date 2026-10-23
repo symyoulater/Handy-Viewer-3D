@@ -6,7 +6,7 @@
 @font-face { font-family: "Inter"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/inter-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); }
-#dial, #rimrot { transition: transform 40ms linear; }
+#dial, #rimrot { transform-origin: 0 0; transform-box: view-box; transition: transform 40ms linear; }
 :root {
   --bg: #0D0E11;
   --side: #111317;

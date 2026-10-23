@@ -468,9 +468,9 @@
     const a = L.wheelFound ? L.steering : 0;
     const w = wheel();
     const rot = document.getElementById('rimrot');
-    if (rot) rot.setAttribute('transform', `rotate(${w && w.rotates ? a : 0})`);
+    if (rot) rot.style.transform = `rotate(${w && w.rotates ? a : 0}deg)`;
     const dial = document.getElementById('dial');
-    if (dial) dial.setAttribute('transform', `rotate(${a})`);
+    if (dial) dial.style.transform = `rotate(${a}deg)`;
     if (S.state) patch();
   }
 
