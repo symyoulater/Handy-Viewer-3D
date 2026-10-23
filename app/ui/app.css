@@ -172,3 +172,29 @@ select.text-in { appearance: none; background-image: linear-gradient(45deg, tran
 select.text-in option { background: var(--panel); color: var(--text); }
 
 @media (max-width: 1100px) { .brand-sub { display: none; } }
+
+/* ---- Guide page ---- */
+.g-toc { display: flex; flex-wrap: wrap; gap: 8px; }
+.g-toc a { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text-2); text-decoration: none; font-size: 13px; }
+.g-toc a:hover { color: var(--text); border-color: var(--accent); }
+.g-body { display: flex; flex-direction: column; gap: 16px; max-width: 900px; }
+.g-sec { gap: 12px; line-height: 1.6; }
+.g-sec p { margin: 0; }
+.g-muted { color: var(--text-2); }
+.g-tip { padding: 10px 14px; border-radius: 10px; background: #1B1726; border: 1px solid #3A2E54; }
+.g-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; }
+.g-fig { width: 100%; height: auto; display: block; border-radius: 12px; }
+.g-narrow { max-width: 360px; }
+.g-shot { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.g-shot img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line-2); display: block; }
+.g-shot figcaption { color: var(--text-3); font-size: 12.5px; }
+.g-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; align-items: start; }
+.g-row .g-shot img { max-width: 340px; }
+kbd { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 5px; background: var(--raised); color: var(--text); white-space: nowrap; }
+.g-keys { width: 100%; border-collapse: collapse; }
+.g-keys td { padding: 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.g-keys td:first-child { width: 230px; padding-right: 12px; }
+.g-keys .g-sub td { color: var(--text-3); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; padding-top: 14px; }
+.g-faq { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.g-faq dt { font-weight: 600; margin-top: 8px; }
+.g-faq dd { margin: 0; color: var(--text-2); }

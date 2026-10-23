@@ -151,7 +151,7 @@
               : '<div><span class="muted">No games yet. Start one in VR and it will appear here.</span></div>'}
           </div>
           <p class="muted" style="margin:auto 0 0;line-height:1.6">Games with anti-cheat (such as Le Mans Ultimate) block Thin Place VR until it is digitally signed.<br>
-          In VR: <span class="mono" style="color:var(--text)">Ctrl+Alt+H</span> adjust windows · <span class="mono" style="color:var(--text)">Ctrl+Alt+V</span> hide them · <span class="mono" style="color:var(--text)">Ctrl+Alt+K</span> help board</p>
+          In VR: <span class="mono" style="color:var(--text)">Ctrl+Alt+H</span> adjust windows · <span class="mono" style="color:var(--text)">Ctrl+Alt+V</span> hide them · <span class="mono" style="color:var(--text)">Ctrl+Alt+K</span> setup panel · new here? See the <button class="linkbtn" data-act="go" data-page="guide">Guide</button></p>
         </section>
       </div>`;
   }
@@ -208,9 +208,9 @@
         <div style="display:flex;flex-direction:column;gap:16px">
           <section class="card" aria-labelledby="pos-h">
             <div class="top"><h2 id="pos-h">Position</h2>
-              <div class="seg" role="group" aria-label="Step size"><button data-act="fine" data-f="1" class="${S.fine ? 'on' : ''}">Fine</button><button data-act="fine" data-f="0" class="${S.fine ? '' : 'on'}">Normal</button></div></div>
-            <button class="btn primary" data-act="do" data-a="${A.Place}">Place where I'm looking</button>
-            <button class="btn" data-act="do" data-a="${A.ShiftAll}" title="After the headset has slept or been recentred: look at your wheel and press this">Move all windows together (look at the wheel)</button>
+              <div class="seg" role="group" aria-label="Step size"><button data-act="fine" data-f="1" class="${S.fine ? 'on' : ''}" title="Small steps: 1 mm and a quarter of a degree">Fine</button><button data-act="fine" data-f="0" class="${S.fine ? '' : 'on'}">Normal</button></div></div>
+            <button class="btn primary" data-act="do" data-a="${A.Place}" title="In the headset, look at where this window should go, then click. Same as P in edit mode.">Place where I'm looking</button>
+            <button class="btn" data-act="do" data-a="${A.ShiftAll}" title="After the headset has slept or been recentred, sit normally, face forward and click: every window moves back together. Same as A in edit mode.">Move all windows together (look at the wheel)</button>
             <div class="pad">
               <button class="small" data-act="do" data-a="${A.Closer}">Closer</button>
               <button data-act="do" data-a="${A.Up}" aria-label="Move up">↑</button>
@@ -222,7 +222,7 @@
             <div class="pm"><span>Tilt</span><button data-act="do" data-a="${A.TiltDown}" aria-label="Tilt towards you">−</button><button data-act="do" data-a="${A.TiltUp}" aria-label="Tilt away">+</button></div>
             <div class="pm"><span>Turn</span><button data-act="do" data-a="${A.TurnRight}" aria-label="Turn right">−</button><button data-act="do" data-a="${A.TurnLeft}" aria-label="Turn left">+</button></div>
             <div class="pm"><span>Roll</span><button data-act="do" data-a="${A.RollRight}" aria-label="Roll right">−</button><button data-act="do" data-a="${A.RollLeft}" aria-label="Roll left">+</button></div>
-            <button class="btn" data-act="do" data-a="${A.FaceMe}">Turn to face me</button>
+            <button class="btn" data-act="do" data-a="${A.FaceMe}" title="Turns the selected window to face your head squarely. Same as M in edit mode.">Turn to face me</button>
             <p class="muted" style="margin:0;line-height:1.5">Works while a game is running in VR. Point your head at where the window should go, then press Place — Virtual Desktop's desktop view lets you click these without taking the headset off.</p>
           </section>
           <section class="card" aria-labelledby="shape-h"><h2 id="shape-h">${isWheel ? 'Shape' : 'Window'}</h2>${shape}</section>
@@ -368,7 +368,7 @@
             </svg>
             <div style="display:flex;flex-direction:column;gap:4px"><span class="mono" style="font-size:34px;letter-spacing:-1px" data-live="steer">—</span><span class="muted" data-v="rangeHalf"></span><span class="muted" data-live="steerHint"></span></div>
           </div>
-          <button class="btn" data-act="centre">Set centre — hold the wheel straight</button>
+          <button class="btn" data-act="centre" title="Hold the wheel straight ahead and click, so the window lines up when you're driving straight">Set centre — hold the wheel straight</button>
         </section>
       </div>`;
   }
@@ -439,7 +439,7 @@
           </div>
           <div class="field" style="padding-top:12px;border-top:1px solid var(--line)">
             <span class="muted">Shortcuts in VR</span>
-            <span style="display:flex;gap:8px;flex-wrap:wrap" class="mono"><span class="btn ghost" style="padding:6px 10px;font-size:12px">Adjust · Ctrl+Alt+H</span><span class="btn ghost" style="padding:6px 10px;font-size:12px">Hide · Ctrl+Alt+V</span><span class="btn ghost" style="padding:6px 10px;font-size:12px">Help board · Ctrl+Alt+K</span></span>
+            <span style="display:flex;gap:8px;flex-wrap:wrap" class="mono"><span class="btn ghost" style="padding:6px 10px;font-size:12px">Adjust · Ctrl+Alt+H</span><span class="btn ghost" style="padding:6px 10px;font-size:12px">Hide · Ctrl+Alt+V</span><span class="btn ghost" style="padding:6px 10px;font-size:12px">Setup panel · Ctrl+Alt+K</span></span>
           </div>
         </section>
       </div>`;
@@ -547,7 +547,7 @@
       ((document.activeElement.tagName === 'INPUT' && document.activeElement.type !== 'checkbox' && document.activeElement.type !== 'range') || document.activeElement.tagName === 'SELECT');
     if (force || (key !== S.key && !typing)) {
       S.key = key;
-      const pages = { home: pageHome, windows: pageWindows, wheel: pageWheel, passthrough: pagePassthrough };
+      const pages = { home: pageHome, windows: pageWindows, wheel: pageWheel, passthrough: pagePassthrough, guide: () => window.TPV_GUIDE || '' };
       const scroll = main.scrollTop;
       main.innerHTML = pages[S.page]();
       main.scrollTop = scroll;
@@ -593,6 +593,15 @@
     if (!b) return;
     if (b.dataset.act === 'check') send('checkUpdates');
     if (b.dataset.act === 'install') send('installUpdate');
+  });
+
+  // Guide: contents links scroll within the page.
+  main.addEventListener('click', (e) => {
+    const a = e.target.closest('a[data-gid]');
+    if (!a) return;
+    e.preventDefault();
+    const el = document.getElementById('g-' + a.dataset.gid);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   main.addEventListener('click', async (e) => {
