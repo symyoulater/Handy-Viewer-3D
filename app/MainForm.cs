@@ -14,6 +14,7 @@ namespace ThinPlaceVR
     {
         private readonly WebView2 _web = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.FromArgb(13, 14, 17) };
         private Bridge _bridge;
+        private CoreWebView2Environment _env;
 
         public MainForm()
         {
@@ -108,7 +109,8 @@ namespace ThinPlaceVR
             {
                 // Program Files isn't writable, so WebView2 keeps its working files under Local AppData.
                 string data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Thin Place VR", "WebView2");
-                var env = await CoreWebView2Environment.CreateAsync(null, data);
+                _env = await CoreWebView2Environment.CreateAsync(null, data);
+                var env = _env;
                 await _web.EnsureCoreWebView2Async(env);
             }
             catch (WebView2RuntimeNotFoundException)
@@ -133,6 +135,9 @@ namespace ThinPlaceVR
             core.Settings.AreDefaultContextMenusEnabled = false;
             core.Settings.IsZoomControlEnabled = false;
             core.Settings.IsStatusBarEnabled = false;
+            core.Settings.IsPasswordAutosaveEnabled = false;
+            core.Settings.IsGeneralAutofillEnabled = false;
+            core.Settings.AreHostObjectsAllowed = false;
 #if !DEBUG
             core.Settings.AreDevToolsEnabled = false;
 #endif
@@ -151,6 +156,22 @@ namespace ThinPlaceVR
                     OpenExternal(e.Uri);
                 }
             };
+
+            // The window may only ever load the app's own files: anything else it asks for is refused,
+            // so even a fault in the interface can't fetch or run something from the internet.
+            core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+            core.WebResourceRequested += (s, e) =>
+            {
+                string uri = e.Request.Uri ?? "";
+                if (uri.StartsWith("https://app.thinplace/", StringComparison.OrdinalIgnoreCase) ||
+                    uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
+                    uri.StartsWith("blob:", StringComparison.OrdinalIgnoreCase))
+                    return;
+                Updater.Log("Blocked the app window from loading " + uri);
+                e.Response = _env.CreateWebResourceResponse(null, 403, "Blocked", "");
+            };
+            core.PermissionRequested += (s, e) => e.State = CoreWebView2PermissionState.Deny;
+            core.DownloadStarting += (s, e) => e.Cancel = true;
 
             _bridge = new Bridge(this, core);
             core.Navigate("https://app.thinplace/index.html");

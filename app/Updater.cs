@@ -14,6 +14,8 @@ namespace ThinPlaceVR
         public Version Version;
         public string DownloadUrl;
         public string FileName;
+        public string Sha256; // from GitHub's record of the file, if it has one
+        public long Size;
     }
 
     // Looks for new versions on the repo's GitHub Releases page and installs them.
@@ -32,6 +34,8 @@ namespace ThinPlaceVR
         }
 
         private const string LatestUrl = "https://api.github.com/repos/symyoulater/Thin-Place-VR/releases?per_page=20";
+
+        private const string ReleasePrefix = "https://github.com/symyoulater/Thin-Place-VR/releases/download/";
 
         private static WebClient NewClient()
         {
@@ -84,13 +88,26 @@ namespace ThinPlaceVR
                     if (name.StartsWith("ThinPlaceVR-Setup", StringComparison.OrdinalIgnoreCase) &&
                         name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                     {
-                        info = new UpdateInfo { Version = v, FileName = name, DownloadUrl = ConfigStore.Str(asset, "browser_download_url", null) };
+                        string digest = ConfigStore.Str(asset, "digest", "");
+                        info = new UpdateInfo
+                        {
+                            Version = v,
+                            FileName = Path.GetFileName(name),
+                            DownloadUrl = ConfigStore.Str(asset, "browser_download_url", null),
+                            Sha256 = digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ? digest.Substring(7).ToLowerInvariant() : null,
+                            Size = (long)ConfigStore.Num(asset, "size", 0),
+                        };
                         break;
                     }
                 }
             }
             if (info == null) throw new Exception("No release with an installer was found.");
             if (info.DownloadUrl == null) throw new Exception("The latest release has no installer attached yet.");
+            if (!info.DownloadUrl.StartsWith(ReleasePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                Log("Refused an installer link outside the project: " + info.DownloadUrl);
+                throw new Exception("The update link didn't point at Thin Place VR's own releases, so it wasn't used.");
+            }
             Log("Latest is " + info.Version + " at " + info.DownloadUrl);
             return info;
         }
@@ -116,7 +133,21 @@ namespace ThinPlaceVR
                 Log("Download failed: " + ex);
                 throw new Exception("the download didn't finish (" + ex.Message + ")");
             }
-            Log("Downloaded " + new FileInfo(target).Length + " bytes; starting installer");
+            // Make sure the file is exactly the one GitHub has on record before running it.
+            long length = new FileInfo(target).Length;
+            string hash;
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            using (var fs = File.OpenRead(target))
+                hash = BitConverter.ToString(sha.ComputeHash(fs)).Replace("-", "").ToLowerInvariant();
+            bool sizeOk = info.Size <= 0 || info.Size == length;
+            bool hashOk = info.Sha256 == null || info.Sha256 == hash;
+            if (!sizeOk || !hashOk)
+            {
+                Log("Installer check failed: " + length + " bytes, SHA-256 " + hash + "; expected " + info.Size + " bytes, " + (info.Sha256 ?? "no hash"));
+                try { File.Delete(target); } catch { }
+                throw new Exception("the downloaded installer didn't match the release, so it wasn't run. Try again in a minute.");
+            }
+            Log("Downloaded " + length + " bytes, SHA-256 " + hash + (info.Sha256 != null ? " (matches GitHub's record)" : " (GitHub gave no hash to compare)") + "; starting installer");
 
             // The installer closes this app, updates everything, then opens the app again.
             try
