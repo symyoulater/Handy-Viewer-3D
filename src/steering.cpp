@@ -176,11 +176,23 @@ bool TakeReport(const OpenDevice& dev, std::vector<BYTE>& report) {
 
 // Ask the base for its current position. Bases only send reports when something changes,
 // so this gives a position straight away, even if the wheel is sitting still.
+// Some bases (the Simucube 2) don't answer and stall for seconds instead, so after one failed
+// or slow answer we stop asking that base and rely on its reports alone.
+bool g_askWorks = true;
+
 void AskForPosition(const OpenDevice& dev) {
+    if (!g_askWorks) return;
     std::vector<BYTE> report(dev.caps.InputReportByteLength);
     if (report.empty()) return;
     report[0] = dev.xCaps.ReportID;
-    if (HidD_GetInputReport(dev.handle, report.data(), (ULONG)report.size())) TakeReport(dev, report);
+    DWORD start = GetTickCount();
+    bool ok = HidD_GetInputReport(dev.handle, report.data(), (ULONG)report.size()) && TakeReport(dev, report);
+    DWORD took = GetTickCount() - start;
+    if (!ok || took > 200) {
+        g_askWorks = false;
+        Log("Wheel base doesn't answer position requests (%s after %lu ms) - using its reports only",
+            ok ? "answered" : "no answer", took);
+    }
 }
 
 void ReaderThread() {
@@ -197,6 +209,7 @@ void ReaderThread() {
             }
             lastSearch = now;
             if (FindDevice(dev)) {
+                g_askWorks = true;
                 {
                     std::lock_guard<std::mutex> lock(g_nameMutex);
                     g_deviceName = Narrow(dev.name);
@@ -241,7 +254,17 @@ void ReaderThread() {
             continue;
         }
 
-        if (TakeReport(dev, report)) g_found = true;
+        static int total = 0, withSteering = 0;
+        static DWORD firstAt = 0;
+        static bool summarised = false;
+        if (!firstAt) firstAt = GetTickCount();
+        total++;
+        if (TakeReport(dev, report)) { g_found = true; withSteering++; }
+        if (!summarised && GetTickCount() - firstAt > 3000) {
+            summarised = true;
+            Log("Wheel base: %d reports in the first 3 s, %d with steering (last report id %u)", total, withSteering,
+                report.empty() ? 0u : (unsigned)report[0]);
+        }
     }
     dev.Close();
 }
