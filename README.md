@@ -6,7 +6,7 @@
 
 Thin Place VR adds flat "windows" to any OpenXR game, filled with Virtual Desktop's chroma-key colour (magenta). Virtual Desktop replaces that colour with the Quest 3's passthrough cameras, so your real kit shows through exactly where it sits. The wheel window turns with your Simucube, so it hugs the rim at any steering angle.
 
-**Version 0.4.3** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
+**Version 0.5.0** — wheel window (Conspit 300GT and 310 APEX), Stream Deck window, hotkey placement.
 
 ---
 
@@ -38,8 +38,8 @@ That's it — the next OpenXR game you start will load it.
 Open **Thin Place VR** from the Start menu or desktop.
 
 - **Home** — whether everything is ready: the VR layer, the runtime, your wheel base and live steering, your windows, and recent games.
-- **Windows** — pick a window, then **Place where I'm looking**, nudge, tilt, turn and roll it while a game is running. You can click these from Virtual Desktop's desktop view without taking the headset off. Add, rename, resize, hide or remove windows here too.
-- **Wheel** — choose the fitted rim, set the steering range and direction, watch the live angle and set the centre. **Add a rim** traces a new rim's outline from a front-on photo: give it a name, its width in mm, and where its hub is.
+- **Windows** — pick a window and its shape (rectangle, rounded, circle/oval, or traced from a photo), then **Place where I'm looking**, nudge, tilt, turn and roll it while a game is running. You can click these from Virtual Desktop's desktop view without taking the headset off. Add, rename, resize, hide or remove windows here too.
+- **Wheel** — choose the fitted rim, set the steering range and direction, watch the live angle and set the centre. **Add a rim** either traces a rim's outline from a front-on photo, or uses a standard shape: named rims (Fanatec ClubSport Steering Wheel RS, ClubSport Formula V2.5 and V3, Conspit 310 APEX) or a round, D-shape, GT or formula rim of any width. Choose your **wheel base** here too — automatic detection covers Simucube, Fanatec, Moza, Simagic, Logitech, Thrustmaster, Asetek, VRS, Cammus, Conspit and more, or click **Find it** and turn the wheel.
 - **Passthrough** — the key colour, a Virtual Desktop checklist, step sizes, and troubleshooting tools.
 - **Updates** — the panel in the bottom-left corner checks for new versions and installs them.
 

@@ -52,6 +52,25 @@ bool ContainsNoCase(const std::wstring& hay, const std::wstring& needle) {
 }
 
 // Find a game controller whose product name matches and that has an X (steering) axis.
+// Wheel bases recognised automatically (lower case, matched anywhere in the USB product name).
+const wchar_t* const kKnownBases[] = {
+    L"simucube", L"fanatec", L"moza", L"gudsen", L"simagic", L"thrustmaster", L"logitech g", L"g29", L"g920",
+    L"g923", L"g pro", L"driving force", L"asetek", L"forte", L"invicta", L"la prima", L"vrs", L"directforce",
+    L"cammus", L"conspit", L"turtle beach", L"velocityone", L"pxn", L"accuforce", L"osw", L"leo bodnar",
+    L"sim-r", L"simsteering", L"t300", L"t248", L"t-gt", L"t818", L"ts-pc", L"ts-xw", L"tx racing", L"t150", L"tmx",
+};
+// Things that report an X axis but aren't the steering.
+const wchar_t* const kNotBases[] = {
+    L"pedal", L"handbrake", L"hand brake", L"shifter", L"sequential", L"button box", L"buttonbox", L"joystick",
+    L"throttle", L"hotas", L"gamepad", L"controller", L"xbox", L"dualsense", L"dualshock",
+};
+
+bool IsKnownBase(const std::wstring& name) {
+    for (auto k : kNotBases) if (ContainsNoCase(name, k)) return false;
+    for (auto k : kKnownBases) if (ContainsNoCase(name, k)) return true;
+    return false;
+}
+
 bool FindDevice(OpenDevice& dev) {
     GUID hidGuid;
     HidD_GetHidGuid(&hidGuid);
@@ -59,6 +78,8 @@ bool FindDevice(OpenDevice& dev) {
     if (set == INVALID_HANDLE_VALUE) return false;
 
     std::wstring match = Widen(g_match);
+    bool automatic = match.empty() || (ContainsNoCase(match, L"auto") && match.size() <= 9);
+    std::wstring seen; // every controller with a steering-type axis, for the log
     bool ok = false;
     SP_DEVICE_INTERFACE_DATA iface{sizeof(iface)};
     for (DWORD i = 0; !ok && SetupDiEnumDeviceInterfaces(set, nullptr, &hidGuid, i, &iface); ++i) {
@@ -85,29 +106,42 @@ bool FindDevice(OpenDevice& dev) {
         }
         bool isController = d.caps.UsagePage == 0x01 &&
                             (d.caps.Usage == 0x04 || d.caps.Usage == 0x05 || d.caps.Usage == 0x08);
-        if (!isController || !ContainsNoCase(d.name, match)) {
+        if (!isController) {
             d.Close();
             continue;
         }
 
+        bool hasX = false;
         USHORT n = d.caps.NumberInputValueCaps;
         std::vector<HIDP_VALUE_CAPS> vcaps(n);
         if (n && HidP_GetValueCaps(HidP_Input, vcaps.data(), &n, d.preparsed) == HIDP_STATUS_SUCCESS) {
-            for (USHORT k = 0; k < n; ++k) {
+            for (USHORT k = 0; k < n && !hasX; ++k) {
                 const auto& v = vcaps[k];
-                bool hasX = v.UsagePage == 0x01 &&
-                            (v.IsRange ? (v.Range.UsageMin <= 0x30 && v.Range.UsageMax >= 0x30) : v.NotRange.Usage == 0x30);
-                if (hasX) {
+                if (v.UsagePage == 0x01 &&
+                    (v.IsRange ? (v.Range.UsageMin <= 0x30 && v.Range.UsageMax >= 0x30) : v.NotRange.Usage == 0x30)) {
                     d.xCaps = v;
-                    dev = d;
-                    ok = true;
-                    break;
+                    hasX = true;
                 }
             }
         }
-        if (!ok) d.Close();
+        if (hasX) seen += (seen.empty() ? L"" : L", ") + d.name;
+
+        bool wanted = hasX && (automatic ? IsKnownBase(d.name) : ContainsNoCase(d.name, match));
+        if (wanted) {
+            dev = d;
+            ok = true;
+        } else {
+            d.Close();
+        }
     }
     SetupDiDestroyDeviceInfoList(set);
+
+    static std::wstring lastSeen;
+    if (!ok && seen != lastSeen) {
+        Log("Looking for %s; controllers connected: %s", automatic ? "a known wheel base" : ("\"" + g_match + "\"").c_str(),
+            seen.empty() ? "none" : Narrow(seen).c_str());
+        lastSeen = seen;
+    }
     return ok;
 }
 
@@ -174,10 +208,7 @@ void ReaderThread() {
                 lastAsk = GetTickCount();
                 g_found = true;
             } else {
-                static bool warned = false;
-                if (!warned) Log("No wheel base matching \"%s\" yet - will keep looking", g_match.c_str());
-                warned = true;
-                continue;
+                continue; // FindDevice logs what it saw
             }
         }
 
@@ -222,6 +253,16 @@ void StartSteeringReader(const std::string& deviceMatch) {
     g_match = deviceMatch;
     g_run = true;
     g_thread = std::thread(ReaderThread);
+}
+
+void RestartSteeringReader(const std::string& deviceMatch) {
+    if (deviceMatch == g_match && g_run) return;
+    StopSteeringReader();
+    {
+        std::lock_guard<std::mutex> lock(g_nameMutex);
+        g_deviceName.clear();
+    }
+    StartSteeringReader(deviceMatch);
 }
 
 void StopSteeringReader() {

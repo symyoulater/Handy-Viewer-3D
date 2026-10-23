@@ -22,6 +22,9 @@ namespace ThinPlaceVR
         private readonly CoreWebView2 _web;
         private readonly JavaScriptSerializer _json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
         private readonly Link _link = new Link();
+        private readonly WheelWatcher _wheel = new WheelWatcher();
+        private double _range = 900, _centre;
+        private bool _invert;
         private readonly Timer _liveTimer = new Timer { Interval = 150 };
         private readonly Timer _slowTimer = new Timer { Interval = 2000 };
         private readonly FileSystemWatcher _watcher = new FileSystemWatcher();
@@ -29,6 +32,7 @@ namespace ThinPlaceVR
         private UpdateInfo _latest;
         private object _replyData;          // extra data a command hands back to the interface
         private TraceResult _pendingRim;    // traced outline waiting for a name and width
+        private int _pendingWindow = -1;    // window a traced outline is for
         private string _updateState = "idle", _updateMessage = "";
         private int _updateProgress;
 
@@ -40,6 +44,7 @@ namespace ThinPlaceVR
             _liveTimer.Tick += (s, e) => PushLive();
             _slowTimer.Tick += (s, e) => PushState();
             _liveTimer.Start();
+            _wheel.Start();
             _slowTimer.Start();
             WatchConfig();
             _web.NavigationCompleted += async (s, e) =>
@@ -61,11 +66,26 @@ namespace ThinPlaceVR
         private void PushLive()
         {
             var s = _link.Read();
+            if (!s.GameRunning && _wheel.TryGet(out string baseName, out double v))
+            {
+                // No game running: show the wheel base read directly by the app.
+                double angle = v * _range / 2;
+                if (_invert) angle = -angle;
+                s.WheelBase = baseName;
+                s.WheelFound = true;
+                s.SteeringDeg = (float)(angle - _centre);
+            }
+            else if (!s.GameRunning && _wheel.TryGet(out string seenName, out _) == false && seenName.Length > 0)
+            {
+                s.WheelBase = seenName; // connected, not moved yet
+                s.WheelFound = true;
+            }
             _lastLive = s;
             Post(new Dictionary<string, object>
             {
                 ["type"] = "live",
                 ["running"] = s.GameRunning,
+                ["direct"] = !s.GameRunning && s.WheelFound,
                 ["game"] = s.Game,
                 ["runtime"] = s.Runtime,
                 ["wheelBase"] = s.WheelBase,
@@ -80,6 +100,14 @@ namespace ThinPlaceVR
         public void PushState()
         {
             var cfg = ConfigStore.Load();
+            if (cfg != null)
+            {
+                var st = ConfigStore.Obj(cfg, "steering");
+                _range = ConfigStore.Num(st, "range_deg", 900);
+                _invert = ConfigStore.Bool(st, "invert", false);
+                _centre = ConfigStore.Num(st, "centre_offset_deg", 0);
+                _wheel.SetMatch(ConfigStore.Str(st, "device_match", "auto"));
+            }
             var state = new Dictionary<string, object>
             {
                 ["type"] = "state",
@@ -119,6 +147,8 @@ namespace ThinPlaceVR
                 ["height"] = ConfigStore.Num(w, "height_mm", 95),
                 ["enabled"] = ConfigStore.Bool(w, "enabled", true),
                 ["onlyWhileAdjusting"] = ConfigStore.Bool(w, "only_while_adjusting", false),
+                ["shape"] = ConfigStore.Str(w, "shape", "rect"),
+                ["shapePath"] = ConfigStore.Str(w, "shape", "rect") == "custom" ? ShapePath(ConfigStore.Str(w, "shape_file", "")) : "",
             }).ToList();
             return new Dictionary<string, object>
             {
@@ -130,6 +160,7 @@ namespace ThinPlaceVR
                 ["nudgeDeg"] = ConfigStore.Num(cfg, "nudge_deg", 1),
                 ["range"] = ConfigStore.Num(steering, "range_deg", 900),
                 ["invert"] = ConfigStore.Bool(steering, "invert", false),
+                ["deviceMatch"] = ConfigStore.Str(steering, "device_match", "auto"),
                 ["activeWheel"] = ConfigStore.Str(cfg, "active_wheel", ""),
                 ["wheelPlaced"] = ConfigStore.Bool(cfg, "wheel_placed", false),
                 ["wheels"] = wheels,
@@ -308,6 +339,7 @@ namespace ThinPlaceVR
                             case "nudgeDeg": cfg["nudge_deg"] = Clamp(value, 0.25, 10); break;
                             case "range": steering["range_deg"] = Clamp(value, 90, 3600); break;
                             case "invert": steering["invert"] = Convert.ToBoolean(value); break;
+                            case "deviceMatch": steering["device_match"] = Convert.ToString(value).Trim().Length == 0 ? "auto" : Convert.ToString(value).Trim(); break;
                             case "activeWheel": cfg["active_wheel"] = Convert.ToString(value); break;
                             case "wheelScale":
                             {
@@ -334,6 +366,12 @@ namespace ThinPlaceVR
                         if (a.ContainsKey("height")) w["height_mm"] = Clamp(a["height"], 20, 800);
                         if (a.ContainsKey("enabled")) w["enabled"] = Convert.ToBoolean(a["enabled"]);
                         if (a.ContainsKey("onlyWhileAdjusting")) w["only_while_adjusting"] = Convert.ToBoolean(a["onlyWhileAdjusting"]);
+                        if (a.ContainsKey("shape"))
+                        {
+                            string sh = Convert.ToString(a["shape"]);
+                            if (sh == "rect" || sh == "rounded" || sh == "ellipse" || (sh == "custom" && ConfigStore.Str(w, "shape_file", "").Length > 0))
+                                w["shape"] = sh;
+                        }
                     });
                     return null;
                 }
@@ -393,6 +431,28 @@ namespace ThinPlaceVR
                     return null;
                 }
 
+                case "listBases":
+                {
+                    var names = await System.Threading.Tasks.Task.Run(() =>
+                    {
+                        var all = Hid.OpenAll();
+                        var n = all.Select(d => d.Name).Distinct().ToList();
+                        foreach (var d in all) d.Dispose();
+                        return n;
+                    });
+                    _replyData = names.Select(n => new Dictionary<string, object> { ["name"] = n, ["known"] = Hid.IsKnownBase(n) }).ToList();
+                    return null;
+                }
+
+                case "findBase":
+                {
+                    string found = await System.Threading.Tasks.Task.Run(() => Hid.FindByTurning(TimeSpan.FromSeconds(6)));
+                    if (found == null) return "No wheel moved. Click Find again and turn the wheel from lock to lock while it's looking.";
+                    Save(cfg => ConfigStore.Obj(cfg, "steering")["device_match"] = found);
+                    _replyData = new Dictionary<string, object> { ["name"] = found };
+                    return null;
+                }
+
                 case "traceRim":
                 {
                     string file;
@@ -417,6 +477,58 @@ namespace ThinPlaceVR
                         ["boundsH"] = r.Bounds.Height,
                         ["name"] = Path.GetFileNameWithoutExtension(file),
                     };
+                    return null;
+                }
+
+                case "traceWindow":
+                {
+                    // Same tracing as rims, for a window's own outline (shifter, button box...).
+                    string err = await Handle("traceRim", a);
+                    if (err == null && _pendingRim != null) _pendingWindow = (int)D(a, "index");
+                    return err;
+                }
+
+                case "saveWindowShape":
+                {
+                    if (_pendingRim == null || _pendingWindow < 0) return "Choose a photo first.";
+                    var r = _pendingRim;
+                    int index = _pendingWindow;
+                    double widthMm = Clamp(a.TryGetValue("widthMm", out object wmm) ? wmm : 150, 20, 800);
+                    double s = widthMm / r.Bounds.Width;
+                    double cx = r.Bounds.Left + r.Bounds.Width / 2, cy = r.Bounds.Top + r.Bounds.Height / 2;
+                    var outline = new ArrayList();
+                    foreach (var p in r.Outline) outline.Add(new ArrayList { Math.Round((p.X - cx) * s, 1), Math.Round((cy - p.Y) * s, 1) });
+                    string file = "window-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".json";
+                    WriteShape(file, "Window outline", widthMm, r.Bounds.Height * s, outline);
+                    Save(cfg =>
+                    {
+                        var w = WindowAt(cfg, index);
+                        w["shape"] = "custom";
+                        w["shape_file"] = file;
+                        w["width_mm"] = Math.Round(widthMm, 1);
+                        w["height_mm"] = Math.Round(r.Bounds.Height * s, 1);
+                    });
+                    _pendingRim = null;
+                    _pendingWindow = -1;
+                    return null;
+                }
+
+                case "saveRimOutline":
+                {
+                    // A standard rim type drawn by the interface: outline already in mm around the hub.
+                    string name = ConfigStore.Str(a, "name", "").Trim();
+                    if (name.Length == 0) return "Give the rim a name.";
+                    var outline = new ArrayList();
+                    double minX = 0, maxX = 0, minY = 0, maxY = 0;
+                    foreach (var o in (a["outline"] as IEnumerable) ?? new object[0])
+                    {
+                        var pt = (o as IEnumerable).Cast<object>().Select(v => Convert.ToDouble(v, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+                        outline.Add(new ArrayList { Math.Round(pt[0], 1), Math.Round(pt[1], 1) });
+                        minX = Math.Min(minX, pt[0]); maxX = Math.Max(maxX, pt[0]);
+                        minY = Math.Min(minY, pt[1]); maxY = Math.Max(maxY, pt[1]);
+                    }
+                    if (outline.Count < 8) return "That shape didn't come through. Try again.";
+                    AddRim(name, outline, maxX - minX, maxY - minY, ConfigStore.Bool(a, "rotates", true), "standard rim type");
                     return null;
                 }
 
@@ -484,7 +596,28 @@ namespace ThinPlaceVR
             var outline = new ArrayList();
             foreach (var p in r.Outline)
                 outline.Add(new ArrayList { Math.Round((p.X - cx) * s, 1), Math.Round((cy - p.Y) * s - hubUpMm, 1) });
+            AddRim(name, outline, widthMm, r.Bounds.Height * s, rotates, "traced from a photo");
+        }
 
+        private void WriteShape(string file, string name, double widthMm, double heightMm, ArrayList outline)
+        {
+            string dir = Path.Combine(Paths.DataDir, "shapes");
+            Directory.CreateDirectory(dir);
+            var shape = new Dictionary<string, object>
+            {
+                ["name"] = name,
+                ["source"] = "made in the Thin Place VR app",
+                ["width_mm"] = Math.Round(widthMm, 1),
+                ["height_mm"] = Math.Round(heightMm, 1),
+                ["origin"] = "centre / wheel hub",
+                ["outline_mm"] = outline,
+            };
+            File.WriteAllText(Path.Combine(dir, file), _json.Serialize(shape));
+            ShapeCache.Remove(file);
+        }
+
+        private void AddRim(string name, ArrayList outline, double widthMm, double heightMm, bool rotates, string how)
+        {
             string slug = new string(name.ToLowerInvariant().Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray()).Trim('-');
             if (slug.Length == 0) slug = "rim";
             string id = "user-" + slug;
@@ -493,19 +626,7 @@ namespace ThinPlaceVR
             for (int n = 2; taken.Contains(id); n++) id = "user-" + slug + "-" + n;
 
             string shapeFile = id + ".json";
-            string dir = Path.Combine(Paths.DataDir, "shapes");
-            Directory.CreateDirectory(dir);
-            var shape = new Dictionary<string, object>
-            {
-                ["name"] = name,
-                ["source"] = "traced from a photo in the Thin Place VR app",
-                ["width_mm"] = widthMm,
-                ["height_mm"] = Math.Round(r.Bounds.Height * s, 1),
-                ["origin"] = "wheel hub (rotation centre)",
-                ["outline_mm"] = outline,
-            };
-            File.WriteAllText(Path.Combine(dir, shapeFile), _json.Serialize(shape));
-            ShapeCache.Remove(shapeFile);
+            WriteShape(shapeFile, name, widthMm, heightMm, outline);
 
             Save(cfg =>
             {
@@ -529,7 +650,7 @@ namespace ThinPlaceVR
                 wheels.Add(entry);
                 cfg["active_wheel"] = id;
             });
-            Updater.Log("Added rim " + name + " (" + r.Outline.Count + " points, " + widthMm + " mm wide)");
+            Updater.Log("Added rim " + name + " (" + how + ", " + outline.Count + " points, " + Math.Round(widthMm) + " mm wide)");
         }
 
         private static double Clamp(object v, double min, double max)
@@ -597,6 +718,7 @@ namespace ThinPlaceVR
             _slowTimer.Stop();
             _watcher.Dispose();
             _link.Dispose();
+            _wheel.Dispose();
         }
     }
 }

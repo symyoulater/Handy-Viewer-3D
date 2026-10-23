@@ -9,6 +9,9 @@ namespace hv {
 void StartSteeringReader(const std::string& deviceMatch);
 void StopSteeringReader();
 
+// Switch to a different wheel base ("auto" = any known wheel base) while running.
+void RestartSteeringReader(const std::string& deviceMatch);
+
 // Steering position from -1 (full left) to +1 (full right). Returns false if no base found yet.
 bool GetSteeringNormalised(float& out);
 

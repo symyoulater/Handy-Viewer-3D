@@ -36,7 +36,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.4.3"
+#define HV_VERSION "0.5.0"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -283,6 +283,39 @@ void Rasterise(Window& w) {
     w.needsUpload = true;
 }
 
+// The outline of a non-wheel window, in mm around its centre, from its shape setting.
+Shape WindowShape(const RectWindow& rw) {
+    Shape sh;
+    const float hx = rw.widthMm * 0.5f, hy = rw.heightMm * 0.5f;
+    const float pi = 3.14159265f;
+    if (rw.shape == "ellipse") {
+        for (int i = 0; i < 72; ++i) sh.points.emplace_back(hx * std::cos(i * 2 * pi / 72), hy * std::sin(i * 2 * pi / 72));
+    } else if (rw.shape == "rounded") {
+        float r = std::min(hx, hy) * 0.35f;
+        const float cx[4] = {hx - r, -hx + r, -hx + r, hx - r}, cy[4] = {hy - r, hy - r, -hy + r, -hy + r};
+        for (int c = 0; c < 4; ++c)
+            for (int i = 0; i <= 8; ++i) {
+                float a = (c * 90 + i * 90.0f / 8) * pi / 180;
+                sh.points.emplace_back(cx[c] + r * std::cos(a), cy[c] + r * std::sin(a));
+            }
+    } else if (rw.shape == "custom" && !rw.shapeFile.empty()) {
+        // A traced outline, stretched to the window's width and height.
+        Shape src = LoadShape(rw.shapeFile);
+        if (src.valid()) {
+            float minX = 1e9f, maxX = -1e9f, minY = 1e9f, maxY = -1e9f;
+            for (auto& p : src.points) {
+                minX = std::min(minX, p.first); maxX = std::max(maxX, p.first);
+                minY = std::min(minY, p.second); maxY = std::max(maxY, p.second);
+            }
+            float sx = rw.widthMm / std::max(1.0f, maxX - minX), sy = rw.heightMm / std::max(1.0f, maxY - minY);
+            float mx = (minX + maxX) / 2, my = (minY + maxY) / 2;
+            for (auto& p : src.points) sh.points.emplace_back((p.first - mx) * sx, (p.second - my) * sy);
+        }
+    }
+    if (!sh.valid()) sh.points = {{-hx, -hy}, {hx, -hy}, {hx, hy}, {-hx, hy}};
+    return sh;
+}
+
 // (Re)build the windows from the current config.
 void RebuildWindows() {
     WheelProfile* wp = ActiveWheel();
@@ -303,8 +336,7 @@ void RebuildWindows() {
     for (auto& rw : g.cfg.windows) {
         Window w;
         w.label = rw.name;
-        float hx = rw.widthMm * 0.5f, hy = rw.heightMm * 0.5f;
-        w.shape.points = {{-hx, -hy}, {hx, -hy}, {hx, hy}, {-hx, hy}};
+        w.shape = WindowShape(rw);
         g.rects.push_back(std::move(w));
     }
     if (g.selected > (int)g.rects.size()) g.selected = 0;
@@ -619,13 +651,15 @@ void DoAction(Action action, bool fine, XrTime displayTime) {
                     RebuildWindows();
                     break;
                 }
+                // Resize keeping the window's proportions.
                 RectWindow& rw = g.cfg.windows[g.selected - 1];
                 float d = (action == Action::Bigger ? 1.0f : -1.0f) * (fine ? 1.0f : g.cfg.nudgeMm);
-                rw.widthMm = std::max(20.0f, rw.widthMm + d);
-                rw.heightMm = std::max(20.0f, rw.heightMm + d);
-                float hx = rw.widthMm * 0.5f, hy = rw.heightMm * 0.5f;
+                float f = std::max(20.0f, rw.widthMm + d) / rw.widthMm;
+                if (rw.heightMm * f < 20.0f) f = 20.0f / rw.heightMm;
+                rw.widthMm *= f;
+                rw.heightMm *= f;
                 Window& w = g.rects[g.selected - 1];
-                w.shape.points = {{-hx, -hy}, {hx, -hy}, {hx, hy}, {-hx, hy}};
+                w.shape = WindowShape(rw);
                 Rasterise(w);
                 break;
             }
@@ -757,6 +791,10 @@ void CheckConfig() {
         g.cfgStamp = stamp;
         Config c;
         if (LoadConfig(c)) {
+            if (c.steering.deviceMatch != g.cfg.steering.deviceMatch) {
+                Log("Wheel base choice changed to \"%s\"", c.steering.deviceMatch.c_str());
+                RestartSteeringReader(c.steering.deviceMatch);
+            }
             g.cfg = c;
             g.structureDirty = true;
             Log("config.json changed - reloaded");

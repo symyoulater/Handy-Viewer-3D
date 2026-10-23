@@ -107,6 +107,8 @@ bool SaveConfig(const Config& c) {
                         {"height_mm", w.heightMm},
                         {"enabled", w.enabled},
                         {"only_while_adjusting", w.onlyWhileAdjusting},
+                        {"shape", w.shape},
+                        {"shape_file", w.shapeFile},
                         {"pose", PoseToJson(w.pose)}});
     }
     j["windows"] = wins;
@@ -185,6 +187,8 @@ bool LoadConfig(Config& c) {
                 r.heightMm = w.value("height_mm", r.heightMm);
                 r.enabled = w.value("enabled", true);
                 r.onlyWhileAdjusting = w.value("only_while_adjusting", false);
+                r.shape = w.value("shape", std::string("rect"));
+                r.shapeFile = w.value("shape_file", std::string());
                 if (w.contains("pose")) PoseFromJson(w["pose"], r.pose);
                 c.windows.push_back(r);
             }

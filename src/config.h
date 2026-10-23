@@ -19,7 +19,7 @@ struct SteeringSettings {
     float rangeDeg = 900.0f;       // must match the steering range in Simucube Tuner
     bool invert = false;           // flip if the window turns the wrong way
     float centreOffsetDeg = 0.0f;  // set by the "centre steering" hotkey
-    std::string deviceMatch = "Simucube"; // part of the base's USB product name
+    std::string deviceMatch = "auto"; // "auto" = any known wheel base, else part of its USB product name
 };
 
 struct WheelProfile {
@@ -39,6 +39,8 @@ struct RectWindow {
     float heightMm = 95.0f;
     bool enabled = true;
     bool onlyWhileAdjusting = false; // e.g. a keyboard window: shown only in edit mode / while the app adjusts
+    std::string shape = "rect";      // rect, rounded, ellipse, or custom (traced; outline in shapeFile)
+    std::string shapeFile;
     Pose pose;
 };
 

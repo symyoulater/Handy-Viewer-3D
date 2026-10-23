@@ -169,7 +169,7 @@
          <div class="corner"><span class="muted">Live steering</span><span class="mono" style="font-size:22px" data-live="steer">—</span></div>
          <div class="legend"><span><span class="sw" style="opacity:.8"></span>Rim</span><span><span class="sw" style="opacity:.35"></span>Space for hands · ${Math.round(c.margin)} mm</span></div>`
       : `<svg width="460" height="320" viewBox="${-win.width / 2 - 40} ${-win.height / 2 - 40} ${win.width + 80} ${win.height + 80}" aria-hidden="true" style="max-width:90%">
-           <rect x="${-win.width / 2}" y="${-win.height / 2}" width="${win.width}" height="${win.height}" rx="2" fill="var(--accent)" fill-opacity="0.55" stroke="#ECEEF2" stroke-width="${Math.max(win.width, win.height) / 300}"/></svg>
+           ${windowShapeSvg(win)}</svg>
          <div class="corner"><span class="muted">Size</span><span class="mono" style="font-size:22px">${Math.round(win.width)} × ${Math.round(win.height)} mm</span></div>`;
 
     const shape = isWheel ? `
@@ -181,6 +181,14 @@
         <div class="field"><label for="wname" class="muted">Name</label><input id="wname" class="text-in" style="max-width:190px" value="${esc(win.name)}" data-win="name"></div>
         <div class="field"><label for="ww">Width (mm)</label><input id="ww" class="num-in" type="number" min="20" max="800" value="${Math.round(win.width)}" data-win="width"></div>
         <div class="field"><label for="wh">Height (mm)</label><input id="wh" class="num-in" type="number" min="20" max="800" value="${Math.round(win.height)}" data-win="height"></div>
+        <div class="field"><label for="wshape">Shape</label>
+          <select id="wshape" class="text-in" style="max-width:190px" data-win="shape">
+            <option value="rect" ${win.shape === 'rect' ? 'selected' : ''}>Rectangle</option>
+            <option value="rounded" ${win.shape === 'rounded' ? 'selected' : ''}>Rounded</option>
+            <option value="ellipse" ${win.shape === 'ellipse' ? 'selected' : ''}>Circle / oval</option>
+            ${win.shape === 'custom' ? '<option value="custom" selected>Traced outline</option>' : ''}
+          </select></div>
+        <button class="btn" data-act="traceWindow">Trace its outline from a photo…</button>
         <div class="field"><span>Show in VR</span>${sw('wen', win.enabled, '', null, 'data-win="enabled"')}</div>
         <div class="field"><div class="lbl"><span>Only while adjusting</span><span class="muted">Appears in edit mode (Ctrl+Alt+H) or for 20 s after using these buttons</span></div>${sw('wadj', win.onlyWhileAdjusting, '', null, 'data-win="onlyWhileAdjusting"')}</div>
         <button class="btn danger" data-act="removeWindow">Remove this window</button>`;
@@ -214,6 +222,53 @@
       </div>`;
   }
 
+  function windowShapeSvg(win) {
+    const style = `fill="var(--accent)" fill-opacity="0.55" stroke="#ECEEF2" stroke-width="${Math.max(win.width, win.height) / 300}"`;
+    if (win.shape === 'ellipse') return `<ellipse rx="${win.width / 2}" ry="${win.height / 2}" ${style}/>`;
+    if (win.shape === 'rounded') return `<rect x="${-win.width / 2}" y="${-win.height / 2}" width="${win.width}" height="${win.height}" rx="${Math.min(win.width, win.height) * 0.175}" ${style}/>`;
+    if (win.shape === 'custom' && win.shapePath) {
+      const nums = win.shapePath.match(/-?\d+(\.\d+)?/g).map(Number);
+      const xs = nums.filter((_, i) => i % 2 === 0), ys = nums.filter((_, i) => i % 2 === 1);
+      const w = Math.max(...xs) - Math.min(...xs) || 1, h = Math.max(...ys) - Math.min(...ys) || 1;
+      const mx = (Math.max(...xs) + Math.min(...xs)) / 2, my = (Math.max(...ys) + Math.min(...ys)) / 2;
+      return `<g transform="scale(${win.width / w} ${win.height / h}) translate(${-mx} ${-my})"><path d="${win.shapePath}" ${style} vector-effect="non-scaling-stroke"/></g>`;
+    }
+    return `<rect x="${-win.width / 2}" y="${-win.height / 2}" width="${win.width}" height="${win.height}" rx="2" ${style}/>`;
+  }
+
+  async function traceWindow() {
+    const index = S.tab - 1;
+    const r = await send('traceWindow', { index });
+    if (!r.ok || !r.data) return;
+    const d = r.data;
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="tw-t">
+        <h2 id="tw-t">Window outline</h2>
+        <p class="muted" style="margin:0">Check the outline follows the object. A front-on photo works best.</p>
+        <div class="photo"><svg viewBox="0 0 ${d.width} ${d.height}" role="img" aria-label="Photo with traced outline">
+          <image href="${d.image}" width="${d.width}" height="${d.height}"/>
+          <polygon points="${d.outline}" fill="rgba(183,148,246,.25)" stroke="#E25CE2" stroke-width="${Math.max(2, d.width / 300)}"/></svg></div>
+        <div class="field"><label class="lbl" for="tww"><span>Real width</span><span class="muted">Across the widest point; height follows the photo</span></label>
+          <span style="display:flex;align-items:center;gap:6px"><input id="tww" class="num-in" type="number" min="20" max="800" value="${Math.round(cfg().windows[index].width)}"><span class="muted">mm</span></span></div>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button class="btn ghost" data-m="cancel">Cancel</button>
+          <button class="btn primary" data-m="save">Use this outline</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', async (ev) => {
+      const m = ev.target.closest('[data-m]');
+      if (ev.target === modal || (m && m.dataset.m === 'cancel')) { modal.remove(); return; }
+      if (m && m.dataset.m === 'save') {
+        const res = await send('saveWindowShape', { widthMm: parseFloat(modal.querySelector('#tww').value) || 150 });
+        if (res.ok) { modal.remove(); toast('Outline saved.'); }
+      }
+    });
+    modal.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') modal.remove(); });
+  }
+
   function pageWheel() {
     const c = cfg();
     if (!c) return `<div><div class="eyebrow">Wheel</div><h1>Rim and steering</h1></div>${noConfig()}`;
@@ -239,7 +294,11 @@
         <section class="card" aria-labelledby="steer-h">
           <h2 id="steer-h">Steering</h2>
           <div class="field"><div class="lbl"><span class="muted">Wheel base</span><span style="font-weight:500" data-live="base">—</span></div><span class="muted" data-live="baseState"></span></div>
-          <div class="field"><label class="lbl" for="range"><span>Steering range</span><span class="muted">Match Simucube Tuner</span></label>
+          <div class="field"><label for="basepick">Use</label>
+            <select id="basepick" class="text-in" style="max-width:260px" data-act-change="base">${baseOptions(c.deviceMatch)}</select></div>
+          <div class="field"><span class="muted" style="max-width:240px">Not sure which it is? Click Find, then turn the wheel lock to lock.</span>
+            <button class="btn" data-act="findBase">Find it — turn your wheel</button></div>
+          <div class="field"><label class="lbl" for="range"><span>Steering range</span><span class="muted">Match your wheel software (e.g. Simucube Tuner, Fanatec App, Pit House)</span></label>
             <span style="display:flex;align-items:center;gap:6px"><input id="range" class="num-in" type="number" min="90" max="3600" step="10" data-set="range"><span class="muted">°</span></span></div>
           <div class="field"><div class="lbl"><span>Flip direction</span><span class="muted">If the window turns the wrong way</span></div>${sw('invert', c.invert, '', 'invert')}</div>
         </section>
@@ -256,6 +315,26 @@
           <button class="btn" data-act="centre">Set centre — hold the wheel straight</button>
         </section>
       </div>`;
+  }
+
+  // Wheel base choices: automatic, then every controller found, marking known wheel bases.
+  function baseOptions(current) {
+    const list = S.bases || [];
+    const auto = !current || current.toLowerCase() === 'auto';
+    let html = `<option value="auto" ${auto ? 'selected' : ''}>Automatic — any known wheel base</option>`;
+    let found = auto;
+    for (const b of list) {
+      const sel = !auto && b.name.toLowerCase().includes(current.toLowerCase());
+      if (sel) found = true;
+      html += `<option value="${esc(b.name)}" ${sel ? 'selected' : ''}>${esc(b.name)}${b.known ? '' : ' (not a known wheel base)'}</option>`;
+    }
+    if (!found) html += `<option value="${esc(current)}" selected>${esc(current)} (not connected)</option>`;
+    return html;
+  }
+
+  async function loadBases() {
+    const r = await send('listBases');
+    if (r.ok && r.data) { S.bases = r.data; S.key = ''; refresh(); }
   }
 
   function pagePassthrough() {
@@ -324,9 +403,9 @@
     rtDot: () => ['dot', /Virtual Desktop/.test(S.state.activeRuntime) ? 'good' : 'warn'],
     rtText: () => (S.live.running && S.live.runtime ? friendly(S.live.runtime) : S.state.activeRuntime),
     rtSub: () => (S.live.running ? 'In use now' : 'Active OpenXR runtime'),
-    baseDot: () => ['dot', S.live.running ? (S.live.wheelFound ? 'good' : 'warn') : ''],
-    baseText: () => (S.live.running ? (S.live.wheelFound ? S.live.wheelBase || 'Found' : 'Not found') : '—'),
-    baseSub: () => (S.live.running ? (S.live.wheelFound ? 'Steering ' + deg(S.live.steering) : 'Check the base is on') : 'Shown while a game is running'),
+    baseDot: () => ['dot', S.live.wheelFound ? 'good' : 'warn'],
+    baseText: () => (S.live.wheelFound ? S.live.wheelBase || 'Found' : 'Not found'),
+    baseSub: () => (S.live.wheelFound ? 'Steering ' + deg(S.live.steering) : 'Check it is switched on, or choose it on the Wheel page'),
     marginV: () => Math.round(cfg().margin) + ' mm',
     scaleV: () => (wheel() ? wheel().scale : 100) + '%',
     rangeHalf: () => 'of ±' + Math.round(cfg().range / 2) + '°',
@@ -367,12 +446,12 @@
 
   function patchLive() {
     const L = S.live;
-    document.querySelectorAll('[data-live="steer"]').forEach((el) => { el.textContent = L.running && L.wheelFound ? deg(L.steering) : '—'; });
-    document.querySelectorAll('[data-live="base"]').forEach((el) => { el.textContent = L.running ? (L.wheelBase || 'Not found') : 'Shown while a game is running'; });
+    document.querySelectorAll('[data-live="steer"]').forEach((el) => { el.textContent = L.wheelFound ? deg(L.steering) : '—'; });
+    document.querySelectorAll('[data-live="base"]').forEach((el) => { el.textContent = L.wheelFound ? (L.wheelBase || 'Connected') : 'Not found'; });
     document.querySelectorAll('[data-live="baseState"]').forEach((el) => {
-      el.innerHTML = L.running ? (L.wheelFound ? '<span class="good-t">Connected</span>' : '<span class="warn-t">Not found</span>') : '';
+      el.innerHTML = L.wheelFound ? '<span class="good-t">Connected</span>' : '<span class="warn-t">Not found</span>';
     });
-    const a = L.running && L.wheelFound ? L.steering : 0;
+    const a = L.wheelFound ? L.steering : 0;
     const w = wheel();
     const rot = document.getElementById('rimrot');
     if (rot) rot.setAttribute('transform', `rotate(${w && w.rotates ? a : 0})`);
@@ -385,8 +464,9 @@
   function structureKey() {
     const c = cfg();
     return JSON.stringify([S.page, S.tab, S.fine, S.state && S.state.layerActive, S.state && S.state.activeRuntime,
-      c && [c.activeWheel, c.wheelPlaced, c.invert, c.enabled, c.keyColour, Math.round(c.margin),
-        c.wheels.map((w) => [w.id, w.scale]), c.windows.map((w) => [w.name, w.width, w.height, w.enabled, w.onlyWhileAdjusting])],
+      S.bases && S.bases.map((b) => b.name),
+      c && [c.deviceMatch, c.activeWheel, c.wheelPlaced, c.invert, c.enabled, c.keyColour, Math.round(c.margin),
+        c.wheels.map((w) => [w.id, w.scale]), c.windows.map((w) => [w.name, w.width, w.height, w.enabled, w.onlyWhileAdjusting, w.shape, w.shapePath])],
       S.state && (S.state.games || []).map((g) => g.exe + g.lastUsed)]);
   }
 
@@ -395,7 +475,7 @@
     if (!S.state) return;
     const key = structureKey();
     const typing = document.activeElement && main.contains(document.activeElement) &&
-      (document.activeElement.tagName === 'INPUT' && document.activeElement.type !== 'checkbox' && document.activeElement.type !== 'range');
+      ((document.activeElement.tagName === 'INPUT' && document.activeElement.type !== 'checkbox' && document.activeElement.type !== 'range') || document.activeElement.tagName === 'SELECT');
     if (force || (key !== S.key && !typing)) {
       S.key = key;
       const pages = { home: pageHome, windows: pageWindows, wheel: pageWheel, passthrough: pagePassthrough };
@@ -434,6 +514,7 @@
     S.page = b.dataset.page;
     refresh(true);
     main.focus();
+    if (S.page === 'wheel') loadBases();
   });
 
   document.getElementById('version').addEventListener('click', async (e) => {
@@ -470,6 +551,17 @@
         break;
       case 'rim': send('set', { key: 'activeWheel', value: b.dataset.id }); break;
       case 'addRim': addRim(); break;
+      case 'traceWindow': traceWindow(); break;
+      case 'findBase': {
+        b.disabled = true;
+        const label = b.textContent;
+        b.textContent = 'Turn the wheel now…';
+        const r = await send('findBase');
+        b.disabled = false;
+        b.textContent = label;
+        if (r.ok && r.data) { toast('Using ' + r.data.name); loadBases(); }
+        break;
+      }
       case 'removeRim': {
         e.stopPropagation();
         const w = cfg().wheels.find((x) => x.id === b.dataset.id);
@@ -509,8 +601,126 @@
   });
 
   // ------------------------------------------------------------- add a rim ----
-  async function addRim() {
+  // Standard rim types, drawn around the hub (mm, y up). Close enough to drive with; the hand margin
+  // covers the difference. For an exact outline, trace a photo instead.
+  const RIM_TYPES = {
+    round: { label: 'Round', ratio: 1, rotates: false },
+    flat: { label: 'Flat-bottom (D-shape)', ratio: 0.9, rotates: true },
+    gt: { label: 'GT', ratio: 0.56, rotates: true },
+    formula: { label: 'Formula', ratio: 0.5, rotates: true },
+  };
+  // Named rims with their published sizes.
+  const RIM_PRESETS = [
+    { name: 'Fanatec ClubSport Steering Wheel RS', type: 'round', width: 320 },
+    { name: 'Fanatec ClubSport Formula V2.5', type: 'formula', width: 270 },
+    { name: 'Fanatec ClubSport Formula V3', type: 'formula', width: 290 },
+    { name: 'Conspit 310 APEX', type: 'round', width: 310 },
+  ];
+
+  function rimOutline(type, width) {
+    const a = width / 2, pts = [];
+    if (type === 'round' || type === 'flat') {
+      const cut = type === 'flat' ? -0.8 * a : -a - 1; // flat bottom: a chord across the lower part
+      for (let i = 0; i < 96; i++) {
+        const t = (i / 96) * Math.PI * 2;
+        let x = a * Math.cos(t), y = a * Math.sin(t);
+        if (y < cut) y = cut; // points below the cut lie along the flat edge
+        pts.push([x, y]);
+      }
+    } else {
+      // A rounded-rectangle-like curve (superellipse): squarer for formula rims.
+      const b = a * RIM_TYPES[type].ratio, n = type === 'formula' ? 4.5 : 3;
+      for (let i = 0; i < 96; i++) {
+        const t = (i / 96) * Math.PI * 2, c = Math.cos(t), s2 = Math.sin(t);
+        pts.push([a * Math.sign(c) * Math.pow(Math.abs(c), 2 / n), b * Math.sign(s2) * Math.pow(Math.abs(s2), 2 / n)]);
+      }
+    }
+    return pts.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]);
+  }
+
+  function addRim() {
     if (!cfg()) return;
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="ar-t">
+        <h2 id="ar-t">Add a rim</h2>
+        <div class="grid2">
+          <button class="rim" data-m="photo" style="align-items:flex-start">
+            <span style="font-weight:500">From a photo</span>
+            <span class="muted">Traces the exact outline. A front-on cut-out or plain background works best.</span></button>
+          <button class="rim" data-m="standard" style="align-items:flex-start">
+            <span style="font-weight:500">Standard shape</span>
+            <span class="muted">Pick a known rim or a type (round, D-shape, GT, formula) and its width.</span></button>
+        </div>
+        <div style="display:flex;justify-content:flex-end"><button class="btn ghost" data-m="cancel">Cancel</button></div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (ev) => {
+      const m = ev.target.closest('[data-m]');
+      if (ev.target === modal || (m && m.dataset.m === 'cancel')) { modal.remove(); return; }
+      if (!m) return;
+      modal.remove();
+      if (m.dataset.m === 'photo') addRimFromPhoto();
+      if (m.dataset.m === 'standard') addRimStandard();
+    });
+  }
+
+  function addRimStandard() {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    const opts = RIM_PRESETS.map((p, i) => `<option value="p${i}">${esc(p.name)} — ${p.width} mm</option>`).join('') +
+      '<option disabled>──────────</option>' +
+      Object.entries(RIM_TYPES).map(([k, t]) => `<option value="t-${k}">Other rim — ${t.label}</option>`).join('');
+    modal.innerHTML = `
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="sr-t">
+        <h2 id="sr-t">Standard rim</h2>
+        <div class="field"><label for="srpick">Rim</label><select id="srpick" class="text-in" style="max-width:360px">${opts}</select></div>
+        <div class="photo"><svg id="srprev" viewBox="-200 -200 400 400" style="max-height:220px" role="img" aria-label="Rim shape preview"></svg></div>
+        <div class="field"><label for="srname">Name</label><input id="srname" class="text-in" style="max-width:300px"></div>
+        <div class="field"><label class="lbl" for="srw"><span>Width</span><span class="muted">Across the widest point</span></label>
+          <span style="display:flex;align-items:center;gap:6px"><input id="srw" class="num-in" type="number" min="150" max="450"><span class="muted">mm</span></span></div>
+        <p class="muted" style="margin:0">A close match, not an exact outline — the space for hands covers the difference. Use a photo for an exact fit.</p>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button class="btn ghost" data-m="cancel">Cancel</button>
+          <button class="btn primary" data-m="save">Add rim</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const $ = (sel) => modal.querySelector(sel);
+    let type = 'round';
+    const draw = () => {
+      const w = parseFloat($('#srw').value) || 300;
+      const pts = rimOutline(type, w);
+      $('#srprev').setAttribute('viewBox', `${-w / 2 - 20} ${-w / 2 - 20} ${w + 40} ${w + 40}`);
+      $('#srprev').innerHTML = `<polygon points="${pts.map(([x, y]) => x + ',' + -y).join(' ')}" fill="rgba(183,148,246,.25)" stroke="#B794F6" stroke-width="3"/>`;
+    };
+    const pick = () => {
+      const v = $('#srpick').value;
+      if (v.startsWith('p')) {
+        const p = RIM_PRESETS[+v.slice(1)];
+        type = p.type; $('#srname').value = p.name; $('#srw').value = p.width;
+      } else {
+        type = v.slice(2); $('#srname').value = RIM_TYPES[type].label + ' rim'; $('#srw').value = 300;
+      }
+      draw();
+    };
+    pick();
+    $('#srpick').addEventListener('change', pick);
+    $('#srw').addEventListener('input', draw);
+    modal.addEventListener('click', async (ev) => {
+      const m = ev.target.closest('[data-m]');
+      if (ev.target === modal || (m && m.dataset.m === 'cancel')) { modal.remove(); return; }
+      if (m && m.dataset.m === 'save') {
+        const w = parseFloat($('#srw').value) || 300;
+        const res = await send('saveRimOutline', { name: $('#srname').value, outline: rimOutline(type, w), rotates: RIM_TYPES[type].rotates });
+        if (res.ok) { modal.remove(); toast('Rim added and selected. Fine-tune it from the Windows page.'); }
+      }
+    });
+    modal.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') modal.remove(); });
+  }
+
+  async function addRimFromPhoto() {
     const r = await send('traceRim');
     if (!r.ok || !r.data) return; // cancelled, or an error already shown
     const d = r.data;
@@ -568,14 +778,16 @@
   // Settings: switches and sliders save on change; number boxes on Enter or leaving the box.
   main.addEventListener('change', (e) => {
     const el = e.target;
+    if (el.dataset.actChange === 'base') { send('set', { key: 'deviceMatch', value: el.value }); return; }
     if (el.dataset.set) {
       const value = el.type === 'checkbox' ? el.checked : parseFloat(el.value);
       if (el.type !== 'checkbox' && isNaN(value)) return;
       send('set', { key: el.dataset.set, value });
     } else if (el.dataset.win) {
       const field = el.dataset.win;
-      const value = el.type === 'checkbox' ? el.checked : field === 'name' ? el.value : parseFloat(el.value);
-      if (field !== 'name' && el.type !== 'checkbox' && isNaN(value)) return;
+      const text = field === 'name' || field === 'shape';
+      const value = el.type === 'checkbox' ? el.checked : text ? el.value : parseFloat(el.value);
+      if (!text && el.type !== 'checkbox' && isNaN(value)) return;
       send('setWindow', { index: S.tab - 1, [field]: value });
     }
   });
@@ -591,6 +803,13 @@
   main.addEventListener('pointerup', (e) => { if (e.target.type === 'range') delete e.target.dataset.dragging; });
   main.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.blur();
+  });
+
+  // Esc closes the dialog on top, wherever the focus is.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const open = document.querySelectorAll('.modal');
+    if (open.length) open[open.length - 1].remove();
   });
 
   send('refresh');
