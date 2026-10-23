@@ -31,7 +31,7 @@ namespace ThinPlaceVR
             catch { }
         }
 
-        private const string LatestUrl = "https://api.github.com/repos/symyoulater/Thin-Place-VR/releases/latest";
+        private const string LatestUrl = "https://api.github.com/repos/symyoulater/Thin-Place-VR/releases?per_page=20";
 
         private static WebClient NewClient()
         {
@@ -62,15 +62,21 @@ namespace ThinPlaceVR
                 throw new Exception("Couldn't reach GitHub (" + ex.Message + ")");
             }
 
-            var json = new JavaScriptSerializer().DeserializeObject(text) as Dictionary<string, object>;
-            if (json == null) throw new Exception("GitHub sent back something unexpected.");
+            // Look through recent releases and take the highest version that has an installer attached.
+            // (GitHub's own "latest" goes by publish time, which can be wrong when two builds finish together.)
+            var list = new JavaScriptSerializer().DeserializeObject(text) as IEnumerable;
+            if (list == null) throw new Exception("GitHub sent back something unexpected.");
 
-            string tag = ConfigStore.Str(json, "tag_name", "").TrimStart('v', 'V');
-            if (!Version.TryParse(tag, out Version v)) throw new Exception("Couldn't read the latest version number.");
-
-            var info = new UpdateInfo { Version = v };
-            if (json.TryGetValue("assets", out object a) && a is IEnumerable assets)
+            UpdateInfo info = null;
+            foreach (var r in list)
             {
+                if (!(r is Dictionary<string, object> json)) continue;
+                if (json.TryGetValue("draft", out object d) && d is bool isDraft && isDraft) continue;
+                if (json.TryGetValue("prerelease", out object pr) && pr is bool isPre && isPre) continue;
+                string tag = ConfigStore.Str(json, "tag_name", "").TrimStart('v', 'V');
+                if (!Version.TryParse(tag, out Version v)) continue;
+                if (info != null && v <= info.Version) continue;
+                if (!json.TryGetValue("assets", out object a) || !(a is IEnumerable assets)) continue;
                 foreach (var o in assets)
                 {
                     if (!(o is Dictionary<string, object> asset)) continue;
@@ -78,12 +84,12 @@ namespace ThinPlaceVR
                     if (name.StartsWith("ThinPlaceVR-Setup", StringComparison.OrdinalIgnoreCase) &&
                         name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                     {
-                        info.FileName = name;
-                        info.DownloadUrl = ConfigStore.Str(asset, "browser_download_url", null);
+                        info = new UpdateInfo { Version = v, FileName = name, DownloadUrl = ConfigStore.Str(asset, "browser_download_url", null) };
                         break;
                     }
                 }
             }
+            if (info == null) throw new Exception("No release with an installer was found.");
             if (info.DownloadUrl == null) throw new Exception("The latest release has no installer attached yet.");
             Log("Latest is " + info.Version + " at " + info.DownloadUrl);
             return info;
