@@ -424,6 +424,39 @@ namespace ThinPlaceVR
                     return null;
                 }
 
+                case "guideInVR":
+                    // A "Guide" panel showing the guide; it appears in front of you in the headset.
+                    Save(cfg =>
+                    {
+                        var list = ConfigStore.List(cfg, "windows");
+                        var g = list.OfType<Dictionary<string, object>>().FirstOrDefault(w =>
+                            ConfigStore.Str(w, "source", "") == "data" && ConfigStore.Str(w, "source_target", "") == "guide");
+                        if (g == null)
+                        {
+                            g = new Dictionary<string, object>
+                            {
+                                ["name"] = "Guide",
+                                ["width_mm"] = 300.0,
+                                ["height_mm"] = 380.0,
+                                ["shape"] = "rect",
+                                ["only_while_adjusting"] = false,
+                                ["source"] = "data",
+                                ["source_target"] = "guide",
+                                ["source_id"] = Guid.NewGuid().ToString("N").Substring(0, 12),
+                                ["pose"] = new Dictionary<string, object>
+                                {
+                                    ["position_m"] = new ArrayList { 0.0, 1.0, -0.6 },
+                                    ["yaw_deg"] = 0.0, ["pitch_deg"] = 0.0, ["roll_deg"] = 0.0,
+                                },
+                            };
+                            list.Add(g);
+                        }
+                        g["enabled"] = true;
+                        g["placed"] = false; // brought in front of you again
+                    });
+                    SyncSources();
+                    return null;
+
                 case "listDesktopWindows":
                     _replyData = SourceHost.DesktopWindowTitles();
                     return null;

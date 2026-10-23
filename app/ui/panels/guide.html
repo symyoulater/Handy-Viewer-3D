@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<base href="/">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; base-uri 'self'">
+<title>Thin Place VR guide</title>
+<link rel="stylesheet" href="app.css">
+<style>
+  /* The app's Guide page, shown on its own as a panel in the headset (same content, from guide.js). */
+  html, body { height: auto; overflow: auto; }
+  body { padding: 28px 32px 64px; font-size: 16px; }
+  .g-body { max-width: none; }
+</style>
+</head>
+<body>
+<main id="guide"></main>
+<script src="guide.js"></script>
+<script src="panels/guide-panel.js"></script>
+</body>
+</html>

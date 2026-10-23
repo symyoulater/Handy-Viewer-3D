@@ -112,6 +112,18 @@
     return `<div class="banner">Settings appear here after Thin Place VR has run in a game once. Start a VR game from Virtual Desktop, then come back.</div>`;
   }
 
+  // A small "?" that explains a setting when you point at it (or tab to it).
+  function tip(text) {
+    return `<button type="button" class="tip" aria-label="${esc(text)}"><i aria-hidden="true">?</i><em class="tip-body" role="tooltip">${esc(text)}</em></button>`;
+  }
+
+  function pageGuide() {
+    const g = window.TPV_GUIDE || '';
+    const button = '<button class="btn primary" data-act="guideInVR">Show this guide in the headset</button>';
+    // Put the button in the guide's own heading row.
+    return g.replace('<h1>How to use Thin Place VR</h1></div>', '<h1>How to use Thin Place VR</h1></div>' + button);
+  }
+
   function pageHome() {
     const st = S.state, c = cfg();
     const games = (st.games || []).filter((g) => !/check/i.test(g.exe));
@@ -178,9 +190,9 @@
          <div class="corner"><span class="muted">Size</span><span class="mono" style="font-size:22px">${Math.round(win.width)} × ${Math.round(win.height)} mm</span></div>`;
 
     const shape = isWheel ? `
-        <div class="slider"><div class="t"><span>Space for hands</span><span data-v="marginV"></span></div>
+        <div class="slider"><div class="t"><span>Space for hands ${tip('Extra see-through space around the rim, so your hands and arms show as you steer. Raise it if your hands disappear at the edges.')}</span><span data-v="marginV"></span></div>
           <input type="range" min="0" max="150" step="5" data-set="margin" data-fmt="mm" aria-label="Space for hands"></div>
-        <div class="slider"><div class="t"><span>Size</span><span data-v="scaleV"></span></div>
+        <div class="slider"><div class="t"><span>Size ${tip('Makes the whole wheel window bigger or smaller than the real rim. 100% is the rim\'s real size.')}</span><span data-v="scaleV"></span></div>
           <input type="range" min="50" max="200" step="1" data-set="wheelScale" data-fmt="pct" aria-label="Wheel window size"></div>`
       : `
         <div class="field"><label for="wname" class="muted">Name</label><input id="wname" class="text-in" style="max-width:190px" value="${esc(win.name)}" data-win="name"></div>
@@ -237,10 +249,10 @@
 
   // What a window shows: the real world (a passthrough cut-out) or a panel from the PC.
   const SOURCES = [['', 'Real world (passthrough)'], ['window', 'A desktop window'], ['web', 'A web page'], ['pdf', 'A PDF'], ['camera', 'The camera'], ['data', 'Game data']];
-  const DATA_PAGES = [['elite', 'Elite Dangerous status'], ['acevo', 'AC EVO dashboard']];
+  const DATA_PAGES = [['acevo', 'AC EVO dashboard'], ['elite', 'Elite Dangerous status'], ['guide', 'The guide']];
   function sourceFields(win) {
     const kind = win.source || '';
-    const sel = `<div class="field"><label for="wsrc">Shows</label><select id="wsrc" class="text-in" style="max-width:220px" data-act-change="source">
+    const sel = `<div class="field"><label for="wsrc">Shows ${tip('Real world: a see-through cut-out (wheel, Stream Deck, keyboard). Anything else makes this a panel showing that thing from your PC. Panels need this app open.')}</label><select id="wsrc" class="text-in" style="max-width:220px" data-act-change="source">
       ${SOURCES.map(([v, l]) => `<option value="${v}" ${v === kind ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
     if (!kind) return sel;
     let target = '';
@@ -350,7 +362,7 @@
         <section class="card" aria-labelledby="steer-h">
           <h2 id="steer-h">Steering</h2>
           <div class="field"><div class="lbl"><span class="muted">Wheel base</span><span style="font-weight:500" data-live="base">—</span></div><span class="muted" data-live="baseState"></span></div>
-          <div class="field"><label for="basepick">Use</label>
+          <div class="field"><label for="basepick">Use ${tip('Which device the wheel window follows. Automatic picks the first wheel base it recognises; choose yours if it picks the wrong one, or click Find and turn the wheel.')}</label>
             <select id="basepick" class="text-in" style="max-width:260px" data-act-change="base">${baseOptions(c.deviceMatch)}</select></div>
           <div class="field"><span class="muted" style="max-width:240px">Not sure which it is? Click Find, then turn the wheel lock to lock.</span>
             <button class="btn" data-act="findBase">Find it — turn your wheel</button></div>
@@ -426,8 +438,8 @@
           <h2 id="edit-h">Placing and nudging</h2>
           <div class="field"><label class="lbl" for="dist"><span>Place distance</span><span class="muted">About your eyes-to-wheel distance</span></label>
             <span style="display:flex;align-items:center;gap:6px"><input id="dist" class="num-in" type="number" min="20" max="150" data-set="distanceCm"><span class="muted">cm</span></span></div>
-          <div class="field"><label for="nmm">Move step</label><span style="display:flex;align-items:center;gap:6px"><input id="nmm" class="num-in" type="number" min="1" max="50" data-set="nudgeMm"><span class="muted">mm</span></span></div>
-          <div class="field"><label for="ndeg">Turn step</label><span style="display:flex;align-items:center;gap:6px"><input id="ndeg" class="num-in" type="number" min="0.25" max="45" step="0.25" data-set="nudgeDeg"><span class="muted">°</span></span></div>
+          <div class="field"><label for="nmm">Move step ${tip('How far one press of an arrow key or a move button shifts a window. Hold Shift in the headset for 1 mm steps.')}</label><span style="display:flex;align-items:center;gap:6px"><input id="nmm" class="num-in" type="number" min="1" max="50" data-set="nudgeMm"><span class="muted">mm</span></span></div>
+          <div class="field"><label for="ndeg">Turn step ${tip('How far one press of tilt, turn or roll rotates a window. Hold Shift in the headset for quarter-degree steps.')}</label><span style="display:flex;align-items:center;gap:6px"><input id="ndeg" class="num-in" type="number" min="0.25" max="45" step="0.25" data-set="nudgeDeg"><span class="muted">°</span></span></div>
         </section>
         <section class="card" aria-labelledby="tools-h">
           <h2 id="tools-h">Troubleshooting</h2>
@@ -547,7 +559,7 @@
       ((document.activeElement.tagName === 'INPUT' && document.activeElement.type !== 'checkbox' && document.activeElement.type !== 'range') || document.activeElement.tagName === 'SELECT');
     if (force || (key !== S.key && !typing)) {
       S.key = key;
-      const pages = { home: pageHome, windows: pageWindows, wheel: pageWheel, passthrough: pagePassthrough, guide: () => window.TPV_GUIDE || '' };
+      const pages = { home: pageHome, windows: pageWindows, wheel: pageWheel, passthrough: pagePassthrough, guide: pageGuide };
       const scroll = main.scrollTop;
       main.innerHTML = pages[S.page]();
       main.scrollTop = scroll;
@@ -634,6 +646,11 @@
       case 'addRim': addRim(); break;
       case 'traceWindow': traceWindow(); break;
       case 'refreshWins': loadDesktopWindows(); break;
+      case 'guideInVR': {
+        const r = await send('guideInVR');
+        if (r.ok) toast('The guide will appear in front of you in the headset. Keep this app open; scroll it with [ and ] in edit mode.');
+        break;
+      }
       case 'goUrl': {
         const url = (document.getElementById('wurl') || {}).value || '';
         if (url.trim()) send('setSource', { index: S.tab - 1, source: 'web', target: url.trim() });

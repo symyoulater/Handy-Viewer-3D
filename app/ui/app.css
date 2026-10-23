@@ -198,3 +198,13 @@ kbd { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border: 1px s
 .g-faq { margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .g-faq dt { font-weight: 600; margin-top: 8px; }
 .g-faq dd { margin: 0; color: var(--text-2); }
+
+/* "?" tips beside settings */
+.tip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; margin-left: 4px;
+  border-radius: 50%; border: 1px solid var(--line-2); background: transparent; color: var(--text-3); font: 600 11px var(--sans); cursor: help; vertical-align: 1px; padding: 0; }
+.tip i { font-style: normal; }
+.tip:hover, .tip:focus-visible { color: var(--text); border-color: var(--accent); outline: none; }
+.tip-body { display: none; position: absolute; z-index: 50; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); width: 260px;
+  padding: 10px 12px; border-radius: 8px; background: #23262D; border: 1px solid var(--line-2); color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  font: 400 13px/1.45 var(--sans); font-style: normal; text-align: left; white-space: normal; letter-spacing: 0; text-transform: none; pointer-events: none; }
+.tip:hover .tip-body, .tip:focus-visible .tip-body { display: block; }
