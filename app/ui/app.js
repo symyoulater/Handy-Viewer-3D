@@ -409,9 +409,9 @@
     rtDot: () => ['dot', /Virtual Desktop/.test(S.state.activeRuntime) ? 'good' : 'warn'],
     rtText: () => (S.live.running && S.live.runtime ? friendly(S.live.runtime) : S.state.activeRuntime),
     rtSub: () => (S.live.running ? 'In use now' : 'Active OpenXR runtime'),
-    baseDot: () => ['dot', S.live.wheelFound ? 'good' : 'warn'],
-    baseText: () => (S.live.wheelFound ? S.live.wheelBase || 'Found' : 'Not found'),
-    baseSub: () => (!S.live.wheelFound ? 'Check it is switched on, or choose it on the Wheel page'
+    baseDot: () => ['dot', S.live.wheelFound ? 'good' : S.live.running ? 'warn' : ''],
+    baseText: () => (S.live.wheelFound ? S.live.wheelBase || 'Found' : !S.live.running ? 'Check on the Wheel page' : 'Not found'),
+    baseSub: () => (!S.live.wheelFound ? (!S.live.running ? 'The app only connects to the base while the Wheel page is open' : 'Check it is switched on, or choose it on the Wheel page')
       : S.live.hasAngle === false ? 'Connected — turn the wheel to see the angle' : 'Steering ' + deg(S.live.steering)),
     marginV: () => Math.round(cfg().margin) + ' mm',
     scaleV: () => (wheel() ? wheel().scale : 100) + '%',
@@ -456,7 +456,8 @@
     const hasAngle = L.wheelFound && L.hasAngle !== false;
     document.querySelectorAll('[data-live="steer"]').forEach((el) => { el.textContent = hasAngle ? deg(L.steering) : '—'; });
     document.querySelectorAll('[data-live="steerHint"]').forEach((el) => {
-      el.textContent = !L.wheelFound ? 'No headset or game needed — the app reads the base directly'
+      el.textContent = (!L.running && L.otherApp) ? L.otherApp + ' is open — close it to see the live angle here'
+        : !L.wheelFound ? 'No headset or game needed — the app reads the base directly'
         : !hasAngle ? 'Turn the wheel a little — some bases only report when they move'
         : L.running ? 'Read by the game' : 'Read directly from the base';
     });
@@ -525,6 +526,7 @@
     const b = e.target.closest('button[data-page]');
     if (!b) return;
     S.page = b.dataset.page;
+    send('page', { page: S.page });
     refresh(true);
     main.focus();
     if (S.page === 'wheel') loadBases();
@@ -542,7 +544,7 @@
     if (!b || b.disabled) return;
     const act = b.dataset.act;
     switch (act) {
-      case 'go': S.page = b.dataset.page; refresh(true); break;
+      case 'go': S.page = b.dataset.page; send('page', { page: S.page }); refresh(true); if (S.page === 'wheel') loadBases(); break;
       case 'tab':
         S.tab = +b.dataset.i;
         refresh(true);

@@ -94,6 +94,8 @@ namespace ThinPlaceVR
                 ["wheelFound"] = s.WheelFound,
                 ["steering"] = Math.Round(s.SteeringDeg, 1),
                 ["hasAngle"] = hasAngle,
+                ["watching"] = _wheel.Active,
+                ["otherApp"] = _wheel.OtherApp,
                 ["enabled"] = s.WindowsEnabled,
                 ["selected"] = s.Selected,
                 ["editMode"] = s.EditMode,
@@ -327,6 +329,10 @@ namespace ThinPlaceVR
             switch (cmd)
             {
                 case "refresh":
+                    return null;
+
+                case "page":
+                    _wheel.Active = ConfigStore.Str(a, "page", "") == "wheel";
                     return null;
 
                 case "set":
