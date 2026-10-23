@@ -30,7 +30,7 @@ target_include_directories(ThinPlaceVR PRIVATE
     ${nlohmann_json_SOURCE_DIR}/include)
 
 target_compile_definitions(ThinPlaceVR PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
-target_link_libraries(ThinPlaceVR PRIVATE d3d11 d3d12 hid setupapi shell32 ole32 user32)
+target_link_libraries(ThinPlaceVR PRIVATE d3d11 d3d12 hid setupapi shell32 ole32 user32 gdi32)
 
 if(MSVC)
     target_compile_options(ThinPlaceVR PRIVATE /W3 /EHsc /utf-8)

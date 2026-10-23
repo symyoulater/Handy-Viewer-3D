@@ -36,7 +36,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.6.0"
+#define HV_VERSION "0.7.0"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -111,6 +111,14 @@ struct State {
 
     Window wheel;
     std::vector<Window> rects;
+
+    // Help board: a card of controls floating in the headset (Ctrl+Alt+K, and while in edit mode).
+    Window board;
+    bool boardManual = false;   // switched on with Ctrl+Alt+K
+    bool boardHiddenInEdit = false; // switched off with Ctrl+Alt+K during this edit
+    bool boardShowing = false;
+    Pose boardPose;
+    std::wstring boardKey;      // what the board currently shows; redrawn when it changes
     int selected = 0; // 0 = wheel, 1.. = rect windows
     DWORD highlightUntil = 0;
     bool loggedFirstFrame = false;
@@ -574,12 +582,23 @@ void DoAction(Action action, bool fine, XrTime displayTime) {
         Pose* p = SelectedPose();
         switch (action) {
         case Action::EditModeOn:
+            g.boardHiddenInEdit = false;
             Log("Edit mode on - adjusting %s", SelectedName());
             Highlight();
             break;
         case Action::EditModeOff:
             Log("Edit mode off");
             g.highlightUntil = GetTickCount(); // outline clears on the next frame
+            break;
+        case Action::ToggleBoard:
+            if (g.boardShowing) {
+                g.boardManual = false;
+                g.boardHiddenInEdit = InEditMode(); // keep it hidden for the rest of this edit
+            } else {
+                g.boardManual = true;
+                g.boardHiddenInEdit = false;
+            }
+            Log("Help board %s", g.boardShowing ? "off" : "on");
             break;
         case Action::ToggleAll:
             g.cfg.enabled = !g.cfg.enabled;
@@ -677,6 +696,158 @@ void HandleHotkeys(XrTime displayTime) {
     bool fine = false;
     int n = PollHotkeys(actions, 8, fine);
     for (int i = 0; i < n; ++i) DoAction(actions[i], fine, displayTime);
+}
+
+// ---- help board ---------------------------------------------------------------------------
+
+XrPosef ToXrPose(const Pose& p, float spinDeg);
+XrCompositionLayerQuad MakeQuad(const Window& w, const XrPosef& pose);
+
+std::wstring BoardText() {
+    std::wstring sel = Widen(SelectedName());
+    std::wstring t;
+    t += L"Selected:  " + sel + L"\n";
+    t += InEditMode() ? L"Edit mode:  ON  (Esc to finish)\n" : L"Edit mode:  off  (Ctrl+Alt+H)\n";
+    t += g.cfg.enabled ? L"Windows:  shown\n" : L"Windows:  hidden  (Ctrl+Alt+V)\n";
+    return t;
+}
+
+// Draws the board with Windows' own text drawing, then copies it into the window's pixels.
+void RenderBoard(Window& w, const std::wstring& status) {
+    const int W = 560, H = 600;
+    const float mmW = 210.0f, mmH = 225.0f;
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+    bi.bmiHeader.biWidth = W;
+    bi.bmiHeader.biHeight = -H; // top-down
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    void* bits = nullptr;
+    HDC dc = CreateCompatibleDC(nullptr);
+    HBITMAP bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!bmp || !bits) { if (bmp) DeleteObject(bmp); DeleteDC(dc); return; }
+    HGDIOBJ old = SelectObject(dc, bmp);
+
+    RECT all{0, 0, W, H};
+    HBRUSH bg = CreateSolidBrush(RGB(21, 23, 28));
+    FillRect(dc, &all, bg);
+    DeleteObject(bg);
+    SetBkMode(dc, TRANSPARENT);
+    auto font = [&](int px, int weight, const wchar_t* face) {
+        return CreateFontW(-px, 0, 0, 0, weight, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, face);
+    };
+    HFONT title = font(30, FW_SEMIBOLD, L"Segoe UI"), body = font(21, FW_NORMAL, L"Segoe UI"),
+          keyf = font(20, FW_SEMIBOLD, L"Consolas"), small = font(17, FW_NORMAL, L"Segoe UI");
+
+    int y = 22;
+    SelectObject(dc, title);
+    SetTextColor(dc, RGB(236, 238, 242));
+    RECT r{28, y, W - 28, y + 40};
+    DrawTextW(dc, L"Thin Place VR", -1, &r, DT_LEFT | DT_SINGLELINE);
+    y += 50;
+
+    SelectObject(dc, body);
+    SetTextColor(dc, RGB(240, 200, 90));
+    r = {28, y, W - 28, y + 100};
+    DrawTextW(dc, status.c_str(), -1, &r, DT_LEFT | DT_WORDBREAK);
+    y += 96;
+
+    HPEN pen = CreatePen(PS_SOLID, 1, RGB(48, 52, 60));
+    SelectObject(dc, pen);
+    MoveToEx(dc, 28, y, nullptr);
+    LineTo(dc, W - 28, y);
+    y += 14;
+
+    const wchar_t* rows[][2] = {
+        {L"Ctrl+Alt+H", L"edit mode on / off"},
+        {L"Ctrl+Alt+V", L"show / hide windows"},
+        {L"Ctrl+Alt+K", L"this board"},
+        {L"P", L"place where you look"},
+        {L"Tab", L"next window"},
+        {L"\x2190 \x2191 \x2192 \x2193", L"move"},
+        {L"R / F", L"away / closer"},
+        {L"T G  Q E  Z C", L"tilt  turn  roll"},
+        {L"= / \x2212", L"bigger / smaller"},
+        {L"W   X   I", L"rim  centre  flip"},
+        {L"Shift", L"fine steps"},
+    };
+    for (auto& row : rows) {
+        SelectObject(dc, keyf);
+        SetTextColor(dc, RGB(236, 238, 242));
+        r = {28, y, 210, y + 30};
+        DrawTextW(dc, row[0], -1, &r, DT_LEFT | DT_SINGLELINE);
+        SelectObject(dc, body);
+        SetTextColor(dc, RGB(169, 175, 186));
+        r = {220, y, W - 28, y + 30};
+        DrawTextW(dc, row[1], -1, &r, DT_LEFT | DT_SINGLELINE);
+        y += 31;
+    }
+    SelectObject(dc, small);
+    SetTextColor(dc, RGB(142, 149, 161));
+    r = {28, H - 34, W - 28, H - 10};
+    DrawTextW(dc, L"Edit-mode keys work while edit mode is on.", -1, &r, DT_LEFT | DT_SINGLELINE);
+
+    GdiFlush();
+    // Copy out: GDI leaves alpha at 0, so make the board solid with slightly rounded corners.
+    w.texW = W;
+    w.texH = H;
+    w.halfWmm = mmW / 2;
+    w.halfHmm = mmH / 2;
+    w.pixels.assign((size_t)W * H * 4, 0);
+    const uint8_t* src = static_cast<const uint8_t*>(bits);
+    const int rad = 18;
+    for (int py = 0; py < H; ++py)
+        for (int px = 0; px < W; ++px) {
+            int cx = px < rad ? rad - px : px >= W - rad ? px - (W - rad - 1) : 0;
+            int cy = py < rad ? rad - py : py >= H - rad ? py - (H - rad - 1) : 0;
+            if (cx * cx + cy * cy > rad * rad) continue; // outside a rounded corner: clear
+            const uint8_t* s = src + ((size_t)py * W + px) * 4; // B G R x
+            uint8_t* d = &w.pixels[((size_t)py * W + px) * 4];
+            if (g.bgra) { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; }
+            else { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; }
+            d[3] = 242;
+        }
+    w.needsUpload = true;
+
+    SelectObject(dc, old);
+    DeleteObject(pen);
+    for (HFONT f : {title, body, keyf, small}) DeleteObject(f);
+    DeleteObject(bmp);
+    DeleteDC(dc);
+}
+
+// Shows the board in front of you when it's switched on or edit mode starts; it then stays put.
+bool BoardFrame(XrTime displayTime, XrCompositionLayerQuad& out) {
+    bool want = g.boardManual || (InEditMode() && !g.boardHiddenInEdit);
+    if (!want) {
+        g.boardShowing = false;
+        return false;
+    }
+    if (!g.boardShowing) {
+        XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
+        if (XR_FAILED(next.LocateSpace(g.viewSpace, g.baseSpace, displayTime, &loc)) ||
+            !(loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT))
+            return false;
+        // Half a metre ahead, a little to the left and below eye level, facing you.
+        float yaw = 0, pitch = 0;
+        ForwardYawPitch(loc.pose.orientation, yaw, pitch);
+        XrQuaternionf flat = QuatFromYawPitchRoll(yaw, 0, 0);
+        XrVector3f off = QuatRotate(flat, {-0.22f, -0.12f, -0.5f});
+        g.boardPose.position = {loc.pose.position.x + off.x, loc.pose.position.y + off.y, loc.pose.position.z + off.z};
+        g.boardPose.yaw = yaw + 18.0f;
+        g.boardPose.pitch = -12.0f;
+        g.boardPose.roll = 0;
+        g.boardShowing = true;
+        g.boardKey.clear();
+    }
+    std::wstring status = BoardText();
+    if (status != g.boardKey || g.board.texW == 0) {
+        RenderBoard(g.board, status);
+        g.boardKey = status;
+    }
+    if (g.board.needsUpload && !Upload(g.board)) return false;
+    out = MakeQuad(g.board, ToXrPose(g.boardPose, 0.0f));
+    return true;
 }
 
 // Measures how long Thin Place VR's own work takes each frame and logs it every 30 seconds,
@@ -888,6 +1059,9 @@ void SetupSession(XrSession session, const XrSessionCreateInfo* info) {
 }
 
 void TeardownSession() {
+    DestroyWindowResources(g.board);
+    g.board = Window{};
+    g.boardShowing = false;
     DestroyWindowResources(g.wheel);
     for (auto& r : g.rects) DestroyWindowResources(r);
     g.rects.clear();
@@ -975,6 +1149,11 @@ XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* inf
                 if (w.needsUpload && !Upload(w)) continue;
                 quads[nq++] = MakeQuad(w, ToXrPose(g.cfg.windows[i].pose, 0.0f));
             }
+        }
+
+        if (nq < 16 && BoardFrame(info->displayTime, quads[nq])) {
+            g.board.label = "Help board";
+            ++nq;
         }
 
         QueryPerformanceCounter(&t1);

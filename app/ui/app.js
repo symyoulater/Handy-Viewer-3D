@@ -151,7 +151,7 @@
               : '<div><span class="muted">No games yet. Start one in VR and it will appear here.</span></div>'}
           </div>
           <p class="muted" style="margin:auto 0 0;line-height:1.6">Games with anti-cheat (such as Le Mans Ultimate) block Thin Place VR until it is digitally signed.<br>
-          In VR: <span class="mono" style="color:var(--text)">Ctrl+Alt+H</span> adjust windows · <span class="mono" style="color:var(--text)">Ctrl+Alt+V</span> hide them</p>
+          In VR: <span class="mono" style="color:var(--text)">Ctrl+Alt+H</span> adjust windows · <span class="mono" style="color:var(--text)">Ctrl+Alt+V</span> hide them · <span class="mono" style="color:var(--text)">Ctrl+Alt+K</span> help board</p>
         </section>
       </div>`;
   }
@@ -388,7 +388,7 @@
           </div>
           <div class="field" style="padding-top:12px;border-top:1px solid var(--line)">
             <span class="muted">Shortcuts in VR</span>
-            <span style="display:flex;gap:8px;flex-wrap:wrap" class="mono"><span class="btn ghost" style="padding:6px 10px;font-size:12px">Adjust · Ctrl+Alt+H</span><span class="btn ghost" style="padding:6px 10px;font-size:12px">Hide · Ctrl+Alt+V</span></span>
+            <span style="display:flex;gap:8px;flex-wrap:wrap" class="mono"><span class="btn ghost" style="padding:6px 10px;font-size:12px">Adjust · Ctrl+Alt+H</span><span class="btn ghost" style="padding:6px 10px;font-size:12px">Hide · Ctrl+Alt+V</span><span class="btn ghost" style="padding:6px 10px;font-size:12px">Help board · Ctrl+Alt+K</span></span>
           </div>
         </section>
       </div>`;

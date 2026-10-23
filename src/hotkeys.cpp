@@ -76,6 +76,10 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
                 Push(Action::ToggleAll, false);
                 return 1;
             }
+            if (ctrlAlt && vk == 'K') {
+                Push(Action::ToggleBoard, false);
+                return 1;
+            }
             Action a = ctrlAlt ? Action::None : EditAction(vk);
             if (a != Action::None) {
                 g_lastEditKey = GetTickCount();
@@ -89,11 +93,13 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
     }
 
     // Normal driving: only our two shortcuts are caught.
-    if (down && Held(VK_CONTROL) && Held(VK_MENU) && (vk == 'H' || vk == 'V')) {
+    if (down && Held(VK_CONTROL) && Held(VK_MENU) && (vk == 'H' || vk == 'V' || vk == 'K')) {
         if (vk == 'H') {
             g_edit = true;
             g_lastEditKey = GetTickCount();
             Push(Action::EditModeOn, false);
+        } else if (vk == 'K') {
+            Push(Action::ToggleBoard, false);
         } else {
             Push(Action::ToggleAll, false);
         }
