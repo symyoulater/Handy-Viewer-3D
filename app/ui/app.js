@@ -315,7 +315,7 @@
               <g id="dial"><line x1="0" y1="-62" x2="0" y2="-44" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/></g>
               <line x1="0" y1="-68" x2="0" y2="-60" stroke="#5A606B" stroke-width="1"/>
             </svg>
-            <div style="display:flex;flex-direction:column;gap:4px"><span class="mono" style="font-size:34px;letter-spacing:-1px" data-live="steer">—</span><span class="muted" data-v="rangeHalf"></span></div>
+            <div style="display:flex;flex-direction:column;gap:4px"><span class="mono" style="font-size:34px;letter-spacing:-1px" data-live="steer">—</span><span class="muted" data-v="rangeHalf"></span><span class="muted" data-live="steerHint"></span></div>
           </div>
           <button class="btn" data-act="centre">Set centre — hold the wheel straight</button>
         </section>
@@ -411,7 +411,8 @@
     rtSub: () => (S.live.running ? 'In use now' : 'Active OpenXR runtime'),
     baseDot: () => ['dot', S.live.wheelFound ? 'good' : 'warn'],
     baseText: () => (S.live.wheelFound ? S.live.wheelBase || 'Found' : 'Not found'),
-    baseSub: () => (S.live.wheelFound ? 'Steering ' + deg(S.live.steering) : 'Check it is switched on, or choose it on the Wheel page'),
+    baseSub: () => (!S.live.wheelFound ? 'Check it is switched on, or choose it on the Wheel page'
+      : S.live.hasAngle === false ? 'Connected — turn the wheel to see the angle' : 'Steering ' + deg(S.live.steering)),
     marginV: () => Math.round(cfg().margin) + ' mm',
     scaleV: () => (wheel() ? wheel().scale : 100) + '%',
     rangeHalf: () => 'of ±' + Math.round(cfg().range / 2) + '°',
@@ -452,7 +453,13 @@
 
   function patchLive() {
     const L = S.live;
-    document.querySelectorAll('[data-live="steer"]').forEach((el) => { el.textContent = L.wheelFound ? deg(L.steering) : '—'; });
+    const hasAngle = L.wheelFound && L.hasAngle !== false;
+    document.querySelectorAll('[data-live="steer"]').forEach((el) => { el.textContent = hasAngle ? deg(L.steering) : '—'; });
+    document.querySelectorAll('[data-live="steerHint"]').forEach((el) => {
+      el.textContent = !L.wheelFound ? 'No headset or game needed — the app reads the base directly'
+        : !hasAngle ? 'Turn the wheel a little — some bases only report when they move'
+        : L.running ? 'Read by the game' : 'Read directly from the base';
+    });
     document.querySelectorAll('[data-live="base"]').forEach((el) => { el.textContent = L.wheelFound ? (L.wheelBase || 'Connected') : 'Not found'; });
     document.querySelectorAll('[data-live="baseState"]').forEach((el) => {
       el.innerHTML = L.wheelFound ? '<span class="good-t">Connected</span>' : '<span class="warn-t">Not found</span>';

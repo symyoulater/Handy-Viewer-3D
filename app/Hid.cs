@@ -49,46 +49,66 @@ namespace ThinPlaceVR
             private volatile bool _streaming;
             public volatile bool Failed; // the device stopped answering (unplugged)
             private double? _latest;
+            private DateTime _latestAt = DateTime.MinValue;
             private bool _askFailed;
+            private SafeFileHandle _streamHandle;
 
             // Steering from -1 (left) to +1 (right), or null if it couldn't be read.
-            // Asks the base for its position; bases that don't answer are read from their report stream instead.
+            // The base's own report stream is read all the time (on a separate handle, so it never blocks
+            // anything else). Until the stream has delivered something, the base is asked for its position;
+            // bases that don't answer, or answer with something we can't read, rely on the stream alone.
             public double? ReadSteering()
             {
                 if (Handle == null || Handle.IsInvalid || ReportLength <= 0) return null;
-                if (!_askFailed)
-                {
-                    var report = new byte[ReportLength];
-                    report[0] = ReportId;
-                    if (HidD_GetInputReport(Handle, report, report.Length)) return Decode(report);
-                    _askFailed = true;
-                }
                 if (!_streaming)
                 {
                     _streaming = true;
                     var t = new Thread(Stream) { IsBackground = true, Name = "HID reader" };
                     t.Start();
                 }
-                return _latest;
+                if (_latest.HasValue && (DateTime.UtcNow - _latestAt).TotalSeconds < 2) return _latest;
+                if (!_askFailed)
+                {
+                    var report = new byte[ReportLength];
+                    report[0] = ReportId;
+                    double? v = null;
+                    if (HidD_GetInputReport(Handle, report, report.Length)) v = Decode(report);
+                    if (v != null) return v;
+                    _askFailed = true;
+                    Updater.Log("Wheel base \"" + Name + "\" doesn't answer position requests; reading its report stream instead");
+                }
+                return _latest; // last known position (bases only send when something changes)
             }
 
             private void Stream()
             {
                 try
                 {
-                    using (var fs = new FileStream(Handle, FileAccess.Read, ReportLength, false))
+                    _streamHandle = CreateFile(Path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+                    if (_streamHandle.IsInvalid)
+                    {
+                        Updater.Log("Couldn't open a second connection to \"" + Name + "\" (error " + Marshal.GetLastWin32Error() + ")");
+                        return; // asking for the position still works, if the base answers
+                    }
+                    using (var fs = new FileStream(_streamHandle, FileAccess.Read, ReportLength, false))
                     {
                         var buf = new byte[ReportLength];
+                        int count = 0;
                         while (fs.Read(buf, 0, buf.Length) > 0)
                         {
                             var v = Decode(buf);
-                            if (v != null) _latest = v;
+                            if (v != null) { _latest = v; _latestAt = DateTime.UtcNow; }
+                            if (++count == 1)
+                                Updater.Log("Reading \"" + Name + "\": first report id " + buf[0] + ", " + (v == null ? "no steering value in it" : "steering " + v.Value.ToString("0.000")));
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    if (Handle != null && !Handle.IsClosed) Updater.Log("Stopped reading \"" + Name + "\": " + ex.Message);
+                }
                 _latest = null;
-                Failed = true;
+                if (Handle != null && !Handle.IsClosed) Failed = true;
             }
 
             private double? Decode(byte[] report)
@@ -105,7 +125,8 @@ namespace ThinPlaceVR
 
             public void Dispose()
             {
-                Handle?.Dispose(); // ends any report-stream read first
+                Handle?.Dispose();
+                _streamHandle?.Dispose(); // ends any report-stream read
                 IntPtr p = Preparsed;
                 Preparsed = IntPtr.Zero;
                 if (p != IntPtr.Zero) HidD_FreePreparsedData(p);
@@ -318,6 +339,7 @@ namespace ThinPlaceVR
                     nextSearch = DateTime.UtcNow.AddSeconds(2);
                     lock (_lock) { _name = dev?.Name ?? ""; _value = null; }
                     if (dev == null) continue;
+                    Updater.Log("Wheel base connected: \"" + dev.Name + "\" (report " + dev.ReportId + ", " + dev.ReportLength + " bytes, " + dev.BitSize + "-bit steering " + dev.LogicalMin + " to " + dev.LogicalMax + ")");
                 }
                 double? v = null;
                 try { v = dev.ReadSteering(); } catch { }

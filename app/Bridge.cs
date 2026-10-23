@@ -66,6 +66,7 @@ namespace ThinPlaceVR
         private void PushLive()
         {
             var s = _link.Read();
+            bool hasAngle = s.GameRunning && s.WheelFound;
             if (!s.GameRunning && _wheel.TryGet(out string baseName, out double v))
             {
                 // No game running: show the wheel base read directly by the app.
@@ -74,6 +75,7 @@ namespace ThinPlaceVR
                 s.WheelBase = baseName;
                 s.WheelFound = true;
                 s.SteeringDeg = (float)(angle - _centre);
+                hasAngle = true;
             }
             else if (!s.GameRunning && _wheel.TryGet(out string seenName, out _) == false && seenName.Length > 0)
             {
@@ -91,6 +93,7 @@ namespace ThinPlaceVR
                 ["wheelBase"] = s.WheelBase,
                 ["wheelFound"] = s.WheelFound,
                 ["steering"] = Math.Round(s.SteeringDeg, 1),
+                ["hasAngle"] = hasAngle,
                 ["enabled"] = s.WindowsEnabled,
                 ["selected"] = s.Selected,
                 ["editMode"] = s.EditMode,
