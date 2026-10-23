@@ -41,7 +41,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.12.1"
+#define HV_VERSION "0.12.2"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -1043,6 +1043,18 @@ void DoAction(Action action, bool fine, XrTime displayTime) {
         case Action::FaceMe:
             FaceSelected(displayTime);
             break;
+        case Action::SelectWindow0: case static_cast<Action>(41): case static_cast<Action>(42):
+        case static_cast<Action>(43): case static_cast<Action>(44): case static_cast<Action>(45):
+        case static_cast<Action>(46): case static_cast<Action>(47): case static_cast<Action>(48):
+        case Action::SelectWindow9: {
+            int n = static_cast<int>(action) - static_cast<int>(Action::SelectWindow0);
+            if (n <= (int)g.rects.size()) {
+                g.selected = n;
+                Log("Selected: %s", SelectedName());
+                Highlight();
+            }
+            break;
+        }
         case Action::BringBoard:
             g.boardBring = true;
             if (!g.boardShowing) { g.boardManual = true; g.boardHiddenInEdit = false; }

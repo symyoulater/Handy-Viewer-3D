@@ -4,6 +4,8 @@
 // are caught (they don't reach the game); every other key works as normal. Edit mode ends
 // with Esc, Ctrl+Alt+H, or after 30 seconds without an adjustment key.
 // Outside edit mode only Ctrl+Alt+H, Ctrl+Alt+V and Ctrl+Alt+K are caught; everything else goes to the game.
+// Ctrl+Alt+Shift + any edit-mode key does that one adjustment straight away (no edit mode needed),
+// and Ctrl+Alt+Shift+0..9 selects a window - made for Stream Deck buttons.
 #pragma once
 
 namespace hv {
@@ -34,6 +36,8 @@ enum class Action : int {
     PanelDown = 29,      // ]: scroll the selected panel down
     ShiftAll = 30,       // A: move every window together so the wheel window is where you're looking
     FaceMe = 31,         // M: turn the selected window to face you
+    SelectWindow0 = 40,  // Ctrl+Alt+Shift+0..9: select the wheel (0) or window 1..9 - for Stream Deck buttons
+    SelectWindow9 = 49,
 };
 
 void StartHotkeys();

@@ -102,7 +102,20 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
         return CallNextHookEx(nullptr, code, wParam, lParam);
     }
 
-    // Normal driving: only our two shortcuts are caught.
+    // One-shot adjustments for Stream Deck buttons: Ctrl+Alt+Shift + an edit-mode key, or + a digit to select.
+    if (down && Held(VK_CONTROL) && Held(VK_MENU) && Held(VK_SHIFT) && vk != 'H' && vk != 'V' && vk != 'K') {
+        if (vk >= '0' && vk <= '9') {
+            Push(static_cast<Action>(static_cast<int>(Action::SelectWindow0) + (int)(vk - '0')), false);
+            return 1;
+        }
+        Action a = EditAction(vk);
+        if (a != Action::None && vk != VK_SHIFT) {
+            Push(a, false);
+            return 1;
+        }
+    }
+
+    // Normal driving: only our shortcuts are caught.
     if (down && Held(VK_CONTROL) && Held(VK_MENU) && (vk == 'H' || vk == 'V' || vk == 'K')) {
         if (vk == 'H') {
             g_edit = true;
