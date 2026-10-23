@@ -71,7 +71,8 @@ namespace ThinPlaceVR
             private void Stream()
             {
                 var counts = new SortedDictionary<int, int>();
-                int withSteering = 0, total = 0, zeroReads = 0;
+                int withSteering = 0, total = 0, zeroReads = 0, dumps = 0;
+                byte[] last = null;
                 bool summarised = false;
                 var started = DateTime.UtcNow;
                 try
@@ -101,6 +102,13 @@ namespace ThinPlaceVR
                             counts[buf[0]] = counts.TryGetValue(buf[0], out int c) ? c + 1 : 1;
                             var v = Decode(buf);
                             if (v != null) { _latest = v; withSteering++; }
+                            // For diagnosis: log the raw bytes when a report without steering changes (first 25 changes).
+                            if (v == null && dumps < 25 && (last == null || !buf.Take(n).SequenceEqual(last)))
+                            {
+                                dumps++;
+                                Updater.Log("Raw \"" + Name + "\" " + BitConverter.ToString(buf, 0, Math.Min(n, 32)));
+                                last = buf.Take(n).ToArray();
+                            }
                             if (!summarised && (DateTime.UtcNow - started).TotalSeconds >= 3)
                             {
                                 summarised = true;
