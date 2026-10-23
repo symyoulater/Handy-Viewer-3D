@@ -57,6 +57,11 @@ struct Config {
     float placeAimDownDeg = 10.0f;  // P aims this far below where the head points (eyes look lower)
     float wheelMarginMm = 25.0f;    // extra space around the rim for hands
     bool wheelPlaced = false; // false until the wheel window has been placed once
+    // Where the wheel window sits relative to your head (metres right/up/forward and degrees of turn,
+    // measured in the direction you face) - remembered so "move all windows" (A) can put the layout
+    // back exactly after the headset has slept or been recentred.
+    bool wheelViewKnown = false;
+    std::array<float, 4> wheelView{0.0f, 0.0f, 0.0f, 0.0f};
     float nudgeMm = 5.0f;
     float nudgeDeg = 1.0f;
     SteeringSettings steering;

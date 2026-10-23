@@ -196,7 +196,7 @@
           </select></div>
         <button class="btn" data-act="traceWindow">Trace its outline from a photo…</button>`}
         <div class="field"><span>Show in VR</span>${sw('wen', win.enabled, '', null, 'data-win="enabled"')}</div>
-        <div class="field"><div class="lbl"><span>Only while adjusting</span><span class="muted">Appears in edit mode (Ctrl+Alt+H) or for 20 s after using these buttons</span></div>${sw('wadj', win.onlyWhileAdjusting, '', null, 'data-win="onlyWhileAdjusting"')}</div>
+        <div class="field"><div class="lbl"><span>Only while adjusting or typing</span><span class="muted">Appears in edit mode (Ctrl+Alt+H), for 20 s after using these buttons, and for 8 s after you type</span></div>${sw('wadj', win.onlyWhileAdjusting, '', null, 'data-win="onlyWhileAdjusting"')}</div>
         <button class="btn danger" data-act="removeWindow">Remove this window</button>`;
 
     return `

@@ -40,6 +40,9 @@ void StopHotkeys();
 
 bool InEditMode();
 
+// GetTickCount() at the last key press of any kind (0 = none yet).
+unsigned long LastKeyTick();
+
 // Actions queued since the last call. 'fine' is set if Shift was held for any of them.
 int PollHotkeys(Action* out, int maxOut, bool& fine);
 

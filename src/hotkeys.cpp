@@ -21,6 +21,7 @@ std::vector<Action> g_queue;
 bool g_fine = false;
 bool g_shift = false; // tracked here because swallowed keys don't update GetAsyncKeyState
 DWORD g_lastEditKey = 0;
+std::atomic<DWORD> g_lastKeyTick{0}; // any key, for showing a keyboard window while you type
 
 void Push(Action a, bool fine) {
     std::lock_guard<std::mutex> lock(g_mutex);
@@ -68,6 +69,8 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
     DWORD vk = k->vkCode;
 
     if (vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT) g_shift = down;
+    // Real typing only: keys sent by software (a Stream Deck button, say) don't count.
+    if (down && !(k->flags & LLKHF_INJECTED)) g_lastKeyTick = GetTickCount();
 
     if (g_edit) {
         // Edit mode: only Thin Place VR's own keys are caught; everything else still works normally.
@@ -155,6 +158,8 @@ void StopHotkeys() {
 }
 
 bool InEditMode() { return g_edit; }
+
+DWORD LastKeyTick() { return g_lastKeyTick; }
 
 int PollHotkeys(Action* out, int maxOut, bool& fine) {
     std::lock_guard<std::mutex> lock(g_mutex);

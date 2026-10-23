@@ -37,7 +37,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.11.2"
+#define HV_VERSION "0.11.3"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -739,20 +739,51 @@ bool PlaceSelectedInFront(XrTime displayTime) {
 // After the headset has slept or been recentred its idea of the room moves, and every window with it.
 // This moves the whole layout as one piece - turning it and sliding it - so the wheel window lands
 // where you're looking and everything else keeps its place around it.
+bool HeadPose(XrTime displayTime, XrSpaceLocation& loc) {
+    loc = XrSpaceLocation{XR_TYPE_SPACE_LOCATION};
+    return XR_SUCCEEDED(next.LocateSpace(g.viewSpace, g.baseSpace, displayTime, &loc)) &&
+           (loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) &&
+           (loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT);
+}
+
+// Remembers where the wheel window is relative to your head, in the direction you face.
+void RecordWheelView(XrTime displayTime) {
+    WheelProfile* wp = ActiveWheel();
+    XrSpaceLocation loc;
+    if (!wp || !HeadPose(displayTime, loc)) return;
+    float headYaw = 0, headPitch = 0;
+    ForwardYawPitch(loc.pose.orientation, headYaw, headPitch);
+    XrVector3f rel{wp->pose.position[0] - loc.pose.position.x, wp->pose.position[1] - loc.pose.position.y,
+                   wp->pose.position[2] - loc.pose.position.z};
+    XrVector3f local = QuatRotate(QuatFromYawPitchRoll(-headYaw, 0, 0), rel);
+    g.cfg.wheelView = {local.x, local.y, local.z, wp->pose.yaw - headYaw};
+    g.cfg.wheelViewKnown = true;
+}
+
 bool ShiftAllToView(XrTime displayTime) {
     WheelProfile* wp = ActiveWheel();
     if (!wp) return false;
-    XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
-    if (XR_FAILED(next.LocateSpace(g.viewSpace, g.baseSpace, displayTime, &loc)) ||
-        !(loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) ||
-        !(loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT))
-        return false;
-    XrQuaternionf aim = QuatMul(loc.pose.orientation, QuatAxisAngle(1, 0, 0, Deg2Rad(-g.cfg.placeAimDownDeg)));
-    XrVector3f fwd = QuatRotate(aim, {0, 0, -g.cfg.placeDistanceM});
-    XrVector3f target{loc.pose.position.x + fwd.x, loc.pose.position.y + fwd.y, loc.pose.position.z + fwd.z};
-    float headYaw = 0, headPitch = 0;
-    ForwardYawPitch(aim, headYaw, headPitch);
-    const float turn = headYaw - wp->pose.yaw;
+    XrSpaceLocation loc;
+    if (!HeadPose(displayTime, loc)) return false;
+    XrVector3f target;
+    float newYaw = 0;
+    if (g.cfg.wheelViewKnown) {
+        // Put the wheel window back at the same distance and angle from your head as before.
+        float headYaw = 0, headPitch = 0;
+        ForwardYawPitch(loc.pose.orientation, headYaw, headPitch);
+        XrVector3f off = QuatRotate(QuatFromYawPitchRoll(headYaw, 0, 0),
+                                    {g.cfg.wheelView[0], g.cfg.wheelView[1], g.cfg.wheelView[2]});
+        target = {loc.pose.position.x + off.x, loc.pose.position.y + off.y, loc.pose.position.z + off.z};
+        newYaw = headYaw + g.cfg.wheelView[3];
+    } else {
+        // Not known yet: where you're looking, at the usual placing distance.
+        XrQuaternionf aim = QuatMul(loc.pose.orientation, QuatAxisAngle(1, 0, 0, Deg2Rad(-g.cfg.placeAimDownDeg)));
+        XrVector3f fwd = QuatRotate(aim, {0, 0, -g.cfg.placeDistanceM});
+        target = {loc.pose.position.x + fwd.x, loc.pose.position.y + fwd.y, loc.pose.position.z + fwd.z};
+        float p = 0;
+        ForwardYawPitch(aim, newYaw, p);
+    }
+    const float turn = newYaw - wp->pose.yaw;
     const XrQuaternionf rot = QuatFromYawPitchRoll(turn, 0, 0);
     const std::array<float, 3> pivot = wp->pose.position;
     auto move = [&](Pose& p) {
@@ -967,11 +998,25 @@ void DoAction(Action action, bool fine, XrTime displayTime) {
     }
 }
 
+// Moves, turns and placing of the wheel window update where it sits relative to your head.
+void AfterAction(Action action, XrTime displayTime) {
+    if (g.selected != 0) return;
+    switch (action) {
+    case Action::PlaceInFront: case Action::MoveLeft: case Action::MoveRight: case Action::MoveUp:
+    case Action::MoveDown: case Action::MoveAway: case Action::MoveCloser: case Action::TiltUp:
+    case Action::TiltDown: case Action::TurnLeft: case Action::TurnRight: case Action::RollLeft:
+    case Action::RollRight:
+        RecordWheelView(displayTime);
+        break;
+    default: break;
+    }
+}
+
 void HandleHotkeys(XrTime displayTime) {
     Action actions[8];
     bool fine = false;
     int n = PollHotkeys(actions, 8, fine);
-    for (int i = 0; i < n; ++i) DoAction(actions[i], fine, displayTime);
+    for (int i = 0; i < n; ++i) { DoAction(actions[i], fine, displayTime); AfterAction(actions[i], displayTime); }
 }
 
 // ---- help board ---------------------------------------------------------------------------
@@ -1320,6 +1365,7 @@ void ProcessLink(XrTime displayTime) {
     }
     Log("App command %d on %s", (int)action, SelectedName());
     DoAction(action, fine, displayTime);
+    AfterAction(action, displayTime);
 }
 
 // Remember which games have used Thin Place VR, for the app's Home page.
@@ -1547,7 +1593,10 @@ XrResult XRAPI_CALL Hook_xrEndFrame(XrSession session, const XrFrameEndInfo* inf
             }
             for (size_t i = 0; i < g.rects.size() && i < g.cfg.windows.size() && nq < 16; ++i) {
                 if (!g.cfg.windows[i].enabled) continue;
-                if (g.cfg.windows[i].onlyWhileAdjusting && !Adjusting()) continue;
+                // "Only while adjusting" windows (like a keyboard) also show while you're typing.
+                if (g.cfg.windows[i].onlyWhileAdjusting && !Adjusting() &&
+                    !(LastKeyTick() && GetTickCount() - LastKeyTick() < 8000))
+                    continue;
                 Window& w = g.rects[i];
                 if (w.isPanel) UpdatePanel(w, g.cfg.windows[i]);
                 if (w.texW == 0) continue;

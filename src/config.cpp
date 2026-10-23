@@ -90,6 +90,7 @@ bool SaveConfig(const Config& c) {
     j["place_aim_down_deg"] = c.placeAimDownDeg;
     j["wheel_margin_mm"] = c.wheelMarginMm;
     j["wheel_placed"] = c.wheelPlaced;
+    if (c.wheelViewKnown) j["wheel_view"] = {c.wheelView[0], c.wheelView[1], c.wheelView[2], c.wheelView[3]};
     j["nudge_mm"] = c.nudgeMm;
     j["nudge_deg"] = c.nudgeDeg;
     j["steering"] = {{"range_deg", c.steering.rangeDeg},
@@ -180,6 +181,10 @@ bool LoadConfig(Config& c) {
         c.placeAimDownDeg = j.value("place_aim_down_deg", d.placeAimDownDeg);
         c.wheelMarginMm = j.value("wheel_margin_mm", d.wheelMarginMm);
         c.wheelPlaced = j.value("wheel_placed", d.wheelPlaced);
+        if (j.contains("wheel_view") && j["wheel_view"].is_array() && j["wheel_view"].size() == 4) {
+            for (int i = 0; i < 4; ++i) c.wheelView[i] = j["wheel_view"][i].get<float>();
+            c.wheelViewKnown = true;
+        }
         c.nudgeMm = j.value("nudge_mm", d.nudgeMm);
         c.nudgeDeg = j.value("nudge_deg", d.nudgeDeg);
         if (j.contains("steering")) {
