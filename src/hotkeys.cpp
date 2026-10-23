@@ -39,6 +39,7 @@ Action EditAction(DWORD vk) {
     case 'S': return Action::CycleShape;
     case 'B': return Action::BringBoard;
     case 'A': return Action::ShiftAll;
+    case 'M': return Action::FaceMe;
     case VK_OEM_4: return Action::PanelUp;
     case VK_OEM_6: return Action::PanelDown;
     case 'W': return Action::NextWheel;

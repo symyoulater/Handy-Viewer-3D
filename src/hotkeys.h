@@ -33,6 +33,7 @@ enum class Action : int {
     PanelUp = 28,        // [: scroll the selected panel up
     PanelDown = 29,      // ]: scroll the selected panel down
     ShiftAll = 30,       // A: move every window together so the wheel window is where you're looking
+    FaceMe = 31,         // M: turn the selected window to face you
 };
 
 void StartHotkeys();

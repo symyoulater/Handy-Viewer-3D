@@ -24,6 +24,10 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <thread>
 
 #include "config.h"
 #include "hotkeys.h"
@@ -37,7 +41,7 @@
 #include <fstream>
 #include <sstream>
 
-#define HV_VERSION "0.11.3"
+#define HV_VERSION "0.11.4"
 #define HV_LAYER_NAME "XR_APILAYER_SYMYOULATER_thin_place_vr"
 
 namespace hv {
@@ -85,10 +89,9 @@ struct Window {
     // Panels: a picture shared by the desktop app instead of a passthrough cut-out.
     bool isPanel = false;
     std::string sourceId;
-    HANDLE srcMap = nullptr;
-    const uint8_t* srcView = nullptr;
-    uint32_t srcSeq = 0;
-    DWORD srcNextTry = 0;
+    std::shared_ptr<struct PanelFeed> feed; // reads the app's pictures on its own thread
+    std::vector<uint8_t> frame;             // the latest picture, before the selection outline
+    int frameW = 0, frameH = 0;
     bool showingPlaceholder = false;
 };
 
@@ -347,12 +350,118 @@ constexpr size_t kSrcHeader = 32;
 constexpr uint32_t kSrcMaxW = 1920, kSrcMaxH = 1200;
 constexpr size_t kSrcBytes = kSrcHeader + (size_t)kSrcMaxW * kSrcMaxH * 4;
 
+// Watches one panel's shared memory on a background thread and keeps a ready-to-upload copy
+// (already in the swapchain's colour order), so the game's frame never waits on copying pictures.
+struct PanelFeed {
+    std::string id;
+    bool bgra = true;
+    std::atomic<bool> run{true};
+    std::atomic<bool> connected{false};
+    std::thread thread;
+    std::mutex m;
+    std::vector<uint8_t> ready; // guarded by m
+    int readyW = 0, readyH = 0;
+    bool hasNew = false;
+
+    ~PanelFeed() {
+        run = false;
+        if (thread.joinable()) thread.join();
+    }
+
+    void Loop() {
+        HANDLE map = nullptr;
+        const uint8_t* view = nullptr;
+        uint32_t lastSeq = 0;
+        std::vector<uint8_t> work;
+        while (run) {
+            if (!view) {
+                std::wstring name = L"Local\\ThinPlaceVR.Src." + Widen(id);
+                map = OpenFileMappingW(FILE_MAP_READ, FALSE, name.c_str());
+                if (map) view = static_cast<const uint8_t*>(MapViewOfFile(map, FILE_MAP_READ, 0, 0, kSrcBytes));
+                if (map && !view) { CloseHandle(map); map = nullptr; }
+                if (!view) { for (int i = 0; i < 50 && run; ++i) Sleep(20); continue; }
+                connected = true;
+            }
+            const volatile uint32_t* hdr = reinterpret_cast<const volatile uint32_t*>(view);
+            uint32_t seq = hdr[1];
+            if (hdr[0] != kSrcMagic || seq == lastSeq || (seq & 1)) { Sleep(8); continue; }
+            uint32_t iw = hdr[2], ih = hdr[3];
+            if (iw == 0 || ih == 0 || iw > kSrcMaxW || ih > kSrcMaxH) { Sleep(8); continue; }
+            size_t n = (size_t)iw * ih;
+            work.resize(n * 4);
+            const uint8_t* src = view + kSrcHeader;
+            if (bgra) {
+                memcpy(work.data(), src, n * 4);
+                for (size_t i = 0; i < n; ++i) work[i * 4 + 3] = 255;
+            } else {
+                for (size_t i = 0; i < n; ++i) {
+                    work[i * 4] = src[i * 4 + 2];
+                    work[i * 4 + 1] = src[i * 4 + 1];
+                    work[i * 4 + 2] = src[i * 4];
+                    work[i * 4 + 3] = 255;
+                }
+            }
+            MemoryBarrier();
+            if (hdr[1] != seq) continue; // a newer picture arrived while copying: take that one
+            lastSeq = seq;
+            {
+                std::lock_guard<std::mutex> lock(m);
+                ready.swap(work);
+                readyW = (int)iw;
+                readyH = (int)ih;
+                hasNew = true;
+            }
+            Sleep(8);
+        }
+        if (view) UnmapViewOfFile(view);
+        if (map) CloseHandle(map);
+    }
+};
+
 void CloseSource(Window& w) {
-    if (w.srcView) UnmapViewOfFile(w.srcView);
-    if (w.srcMap) CloseHandle(w.srcMap);
-    w.srcView = nullptr;
-    w.srcMap = nullptr;
-    w.srcSeq = 0;
+    if (w.feed) {
+        w.feed->run = false;
+        if (w.feed->thread.joinable()) w.feed->thread.join();
+        w.feed.reset();
+    }
+}
+
+void StartSource(Window& w) {
+    auto f = std::make_shared<PanelFeed>();
+    f->id = w.sourceId;
+    f->bgra = g.bgra;
+    PanelFeed* raw = f.get();
+    f->thread = std::thread([raw] { raw->Loop(); });
+    w.feed = f;
+}
+
+// Copies the latest picture into the window's pixels, adding the selection outline if selected.
+void ComposePanel(Window& w) {
+    if (w.frame.empty()) return;
+    if (w.frameW != w.texW || w.frameH != w.texH) {
+        DestroyWindowResources(w);
+        w.texW = w.frameW;
+        w.texH = w.frameH;
+    }
+    w.pixels = w.frame;
+    if (w.highlighted) {
+        const int t = std::max(3, w.frameW / 160);
+        const uint8_t c[3] = {183, 148, 246};
+        auto paint = [&](int x0, int y0, int x1, int y1) {
+            for (int y = y0; y < y1; ++y)
+                for (int x = x0; x < x1; ++x) {
+                    uint8_t* d = &w.pixels[((size_t)y * w.frameW + x) * 4];
+                    if (g.bgra) { d[0] = c[2]; d[1] = c[1]; d[2] = c[0]; }
+                    else { d[0] = c[0]; d[1] = c[1]; d[2] = c[2]; }
+                }
+        };
+        paint(0, 0, w.frameW, t);
+        paint(0, w.frameH - t, w.frameW, w.frameH);
+        paint(0, 0, t, w.frameH);
+        paint(w.frameW - t, 0, w.frameW, w.frameH);
+    }
+    w.showingPlaceholder = false;
+    w.needsUpload = true;
 }
 
 // A dark card with a line of text, shown until the app sends a picture.
@@ -408,69 +517,26 @@ void RenderPlaceholder(Window& w, const std::wstring& line1, const std::wstring&
     w.showingPlaceholder = true;
 }
 
-// Picks up a new frame from the app, if there is one. Cheap when nothing has changed.
+// Picks up a new picture from the panel's feed, if there is one. Cheap when nothing has changed.
 void UpdatePanel(Window& w, const RectWindow& rw) {
     w.halfWmm = rw.widthMm * 0.5f;
     w.halfHmm = rw.heightMm * 0.5f;
-    if (!w.srcView) {
-        DWORD now = GetTickCount();
-        if (now >= w.srcNextTry) {
-            w.srcNextTry = now + 2000;
-            std::wstring name = L"Local\\ThinPlaceVR.Src." + Widen(w.sourceId);
-            w.srcMap = OpenFileMappingW(FILE_MAP_READ, FALSE, name.c_str());
-            if (w.srcMap) {
-                w.srcView = static_cast<const uint8_t*>(MapViewOfFile(w.srcMap, FILE_MAP_READ, 0, 0, kSrcBytes));
-                if (!w.srcView) { CloseHandle(w.srcMap); w.srcMap = nullptr; }
-                else Log("Panel %s connected to the app", rw.name.c_str());
-            }
-        }
-        if (!w.srcView) {
-            if (!w.showingPlaceholder || w.texW == 0)
-                RenderPlaceholder(w, Widen(rw.name), L"Waiting for the Thin Place VR app - open it on the PC to show this panel");
-            return;
+    if (!w.feed) StartSource(w);
+    bool fresh = false;
+    {
+        std::lock_guard<std::mutex> lock(w.feed->m);
+        if (w.feed->hasNew) {
+            w.frame.swap(w.feed->ready);
+            w.frameW = w.feed->readyW;
+            w.frameH = w.feed->readyH;
+            w.feed->hasNew = false;
+            fresh = true;
         }
     }
-    if (w.texW == 0) RenderPlaceholder(w, Widen(rw.name), L"Starting...");
-    const volatile uint32_t* hdr = reinterpret_cast<const volatile uint32_t*>(w.srcView);
-    if (hdr[0] != kSrcMagic) return;
-    uint32_t seq = hdr[1];
-    if (seq == w.srcSeq || (seq & 1)) return;
-    uint32_t iw = hdr[2], ih = hdr[3];
-    if (iw == 0 || ih == 0 || iw > kSrcMaxW || ih > kSrcMaxH) return;
-    if ((int)iw != w.texW || (int)ih != w.texH) {
-        DestroyWindowResources(w);
-        w.texW = (int)iw;
-        w.texH = (int)ih;
-    }
-    w.pixels.resize((size_t)iw * ih * 4);
-    const uint8_t* src = w.srcView + kSrcHeader;
-    if (g.bgra) {
-        memcpy(w.pixels.data(), src, w.pixels.size());
-    } else {
-        for (size_t i = 0, n = (size_t)iw * ih; i < n; ++i) {
-            w.pixels[i * 4] = src[i * 4 + 2];
-            w.pixels[i * 4 + 1] = src[i * 4 + 1];
-            w.pixels[i * 4 + 2] = src[i * 4];
-        }
-    }
-    MemoryBarrier();
-    if (hdr[1] != seq) return; // the app wrote a new frame while we copied: take the next one
-    for (size_t i = 0, n = (size_t)iw * ih; i < n; ++i) w.pixels[i * 4 + 3] = 255;
-    if (w.highlighted) {
-        // Selection outline: a lilac frame round the edge.
-        const int t = std::max(3, (int)iw / 160);
-        const uint8_t c[3] = {183, 148, 246};
-        for (uint32_t y = 0; y < ih; ++y)
-            for (uint32_t x = 0; x < iw; ++x)
-                if ((int)x < t || (int)y < t || x >= iw - t || y >= ih - t) {
-                    uint8_t* d = &w.pixels[((size_t)y * iw + x) * 4];
-                    if (g.bgra) { d[0] = c[2]; d[1] = c[1]; d[2] = c[0]; }
-                    else { d[0] = c[0]; d[1] = c[1]; d[2] = c[2]; }
-                }
-    }
-    w.srcSeq = seq;
-    w.showingPlaceholder = false;
-    w.needsUpload = true;
+    if (fresh) { ComposePanel(w); return; }
+    if (w.frame.empty() && (!w.showingPlaceholder || w.texW == 0))
+        RenderPlaceholder(w, Widen(rw.name), w.feed->connected ? L"Starting..."
+                                                                : L"Waiting for the Thin Place VR app - open it on the PC to show this panel");
 }
 
 // Redraw a window after its size, shape or selection changed.
@@ -478,8 +544,8 @@ void RefreshRect(size_t i) {
     if (i >= g.rects.size() || i >= g.cfg.windows.size()) return;
     Window& w = g.rects[i];
     if (w.isPanel) {
-        w.srcSeq = 0;              // copy the current frame again (with or without the outline)
-        w.showingPlaceholder = false;
+        if (!w.frame.empty()) ComposePanel(w); // redraw with or without the outline
+        else w.showingPlaceholder = false;
         return;
     }
     w.shape = WindowShape(g.cfg.windows[i]);
@@ -562,16 +628,31 @@ bool CreateSwapchain(Window& w) {
     return true;
 }
 
+// Uploads use a small ring of command lists and staging buffers, so a copy never has to wait for the
+// GPU to finish the previous one (that wait used to show up as a long frame while a panel updated).
+struct D3D12Slot {
+    ID3D12CommandAllocator* alloc = nullptr;
+    ID3D12GraphicsCommandList* list = nullptr;
+    ID3D12Resource* upload = nullptr;
+    UINT64 uploadSize = 0;
+    UINT64 fenceValue = 0;
+};
+constexpr int kD3D12Slots = 6;
+D3D12Slot g_slots[kD3D12Slots];
+int g_nextSlot = 0;
+
 bool EnsureD3D12Objects() {
-    if (g.d3d12List) return true;
-    if (FAILED(g.d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator),
-                                                     reinterpret_cast<void**>(&g.d3d12Alloc))))
-        return false;
-    if (FAILED(g.d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, g.d3d12Alloc, nullptr,
-                                                __uuidof(ID3D12GraphicsCommandList),
-                                                reinterpret_cast<void**>(&g.d3d12List))))
-        return false;
-    g.d3d12List->Close();
+    if (g.d3d12Fence) return true;
+    for (auto& sl : g_slots) {
+        if (FAILED(g.d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator),
+                                                         reinterpret_cast<void**>(&sl.alloc))))
+            return false;
+        if (FAILED(g.d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, sl.alloc, nullptr,
+                                                    __uuidof(ID3D12GraphicsCommandList),
+                                                    reinterpret_cast<void**>(&sl.list))))
+            return false;
+        sl.list->Close();
+    }
     if (FAILED(g.d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence),
                                           reinterpret_cast<void**>(&g.d3d12Fence))))
         return false;
@@ -579,17 +660,35 @@ bool EnsureD3D12Objects() {
     return true;
 }
 
+void ReleaseD3D12Slots() {
+    for (auto& sl : g_slots) {
+        if (sl.upload) sl.upload->Release();
+        if (sl.list) sl.list->Release();
+        if (sl.alloc) sl.alloc->Release();
+        sl = D3D12Slot{};
+    }
+    g_nextSlot = 0;
+}
+
 bool UploadD3D12(Window& w, ID3D12Resource* image) {
     if (!EnsureD3D12Objects()) return false;
+    D3D12Slot& sl = g_slots[g_nextSlot];
+    g_nextSlot = (g_nextSlot + 1) % kD3D12Slots;
+    // Only waits if this slot's last copy (several uploads ago) still hasn't run - rare.
+    if (sl.fenceValue && g.d3d12Fence->GetCompletedValue() < sl.fenceValue) {
+        g.d3d12Fence->SetEventOnCompletion(sl.fenceValue, g.d3d12Event);
+        WaitForSingleObject(g.d3d12Event, 1000);
+    }
+
     D3D12_RESOURCE_DESC desc = image->GetDesc();
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp{};
     UINT rows = 0;
     UINT64 rowSize = 0, total = 0;
     g.d3d12Device->GetCopyableFootprints(&desc, 0, 1, 0, &fp, &rows, &rowSize, &total);
 
-    if (!g.d3d12Upload || g.d3d12UploadSize < total) {
-        if (g.d3d12Upload) g.d3d12Upload->Release();
-        g.d3d12Upload = nullptr;
+    if (!sl.upload || sl.uploadSize < total) {
+        if (sl.upload) sl.upload->Release();
+        sl.upload = nullptr;
         D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_UPLOAD};
         D3D12_RESOURCE_DESC bd{};
         bd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -602,21 +701,21 @@ bool UploadD3D12(Window& w, ID3D12Resource* image) {
         if (FAILED(g.d3d12Device->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd,
                                                           D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
                                                           __uuidof(ID3D12Resource),
-                                                          reinterpret_cast<void**>(&g.d3d12Upload))))
+                                                          reinterpret_cast<void**>(&sl.upload))))
             return false;
-        g.d3d12UploadSize = total;
+        sl.uploadSize = total;
     }
 
     uint8_t* mapped = nullptr;
     D3D12_RANGE none{0, 0};
-    if (FAILED(g.d3d12Upload->Map(0, &none, reinterpret_cast<void**>(&mapped)))) return false;
+    if (FAILED(sl.upload->Map(0, &none, reinterpret_cast<void**>(&mapped)))) return false;
     for (int row = 0; row < w.texH && row < (int)rows; ++row)
         memcpy(mapped + fp.Offset + (size_t)row * fp.Footprint.RowPitch, &w.pixels[(size_t)row * w.texW * 4],
                (size_t)w.texW * 4);
-    g.d3d12Upload->Unmap(0, nullptr);
+    sl.upload->Unmap(0, nullptr);
 
-    g.d3d12Alloc->Reset();
-    g.d3d12List->Reset(g.d3d12Alloc, nullptr);
+    sl.alloc->Reset();
+    sl.list->Reset(sl.alloc, nullptr);
 
     D3D12_RESOURCE_BARRIER b{};
     b.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -624,31 +723,29 @@ bool UploadD3D12(Window& w, ID3D12Resource* image) {
     b.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     b.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
     b.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
-    g.d3d12List->ResourceBarrier(1, &b);
+    sl.list->ResourceBarrier(1, &b);
 
     D3D12_TEXTURE_COPY_LOCATION dst{};
     dst.pResource = image;
     dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
     dst.SubresourceIndex = 0;
     D3D12_TEXTURE_COPY_LOCATION src{};
-    src.pResource = g.d3d12Upload;
+    src.pResource = sl.upload;
     src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     src.PlacedFootprint = fp;
-    g.d3d12List->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+    sl.list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
 
     b.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
     b.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    g.d3d12List->ResourceBarrier(1, &b);
-    g.d3d12List->Close();
+    sl.list->ResourceBarrier(1, &b);
+    sl.list->Close();
 
-    ID3D12CommandList* lists[] = {g.d3d12List};
+    // Submitted on the game's own queue, so it runs before the runtime reads the image.
+    ID3D12CommandList* lists[] = {sl.list};
     g.d3d12Queue->ExecuteCommandLists(1, lists);
     ++g.d3d12FenceValue;
     g.d3d12Queue->Signal(g.d3d12Fence, g.d3d12FenceValue);
-    if (g.d3d12Fence->GetCompletedValue() < g.d3d12FenceValue) {
-        g.d3d12Fence->SetEventOnCompletion(g.d3d12FenceValue, g.d3d12Event);
-        WaitForSingleObject(g.d3d12Event, 1000);
-    }
+    sl.fenceValue = g.d3d12FenceValue;
     return true;
 }
 
@@ -832,6 +929,23 @@ void PlaceNewWindows(XrTime displayTime) {
     MarkChanged();
 }
 
+// Turns the selected window so it faces your head squarely (keeps its roll).
+bool FaceSelected(XrTime displayTime) {
+    Pose* p = SelectedPose();
+    XrSpaceLocation loc;
+    if (!p || !HeadPose(displayTime, loc)) return false;
+    float dx = p->position[0] - loc.pose.position.x, dy = p->position[1] - loc.pose.position.y,
+          dz = p->position[2] - loc.pose.position.z;
+    float len = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (len < 0.01f) return false;
+    p->yaw = Rad2Deg(std::atan2(-dx / len, -dz / len));
+    p->pitch = Rad2Deg(std::asin(std::clamp(dy / len, -1.0f, 1.0f)));
+    Log("%s turned to face you", SelectedName());
+    Highlight();
+    MarkChanged();
+    return true;
+}
+
 // True while someone is adjusting windows: keyboard edit mode, or a hotkey / app button in the
 // last 20 seconds. "Only while adjusting" windows (like a keyboard window) show during this.
 bool Adjusting() {
@@ -926,6 +1040,9 @@ void DoAction(Action action, bool fine, XrTime displayTime) {
         case Action::ShiftAll:
             ShiftAllToView(displayTime);
             break;
+        case Action::FaceMe:
+            FaceSelected(displayTime);
+            break;
         case Action::BringBoard:
             g.boardBring = true;
             if (!g.boardShowing) { g.boardManual = true; g.boardHiddenInEdit = false; }
@@ -1002,7 +1119,7 @@ void DoAction(Action action, bool fine, XrTime displayTime) {
 void AfterAction(Action action, XrTime displayTime) {
     if (g.selected != 0) return;
     switch (action) {
-    case Action::PlaceInFront: case Action::MoveLeft: case Action::MoveRight: case Action::MoveUp:
+    case Action::PlaceInFront: case Action::FaceMe: case Action::MoveLeft: case Action::MoveRight: case Action::MoveUp:
     case Action::MoveDown: case Action::MoveAway: case Action::MoveCloser: case Action::TiltUp:
     case Action::TiltDown: case Action::TurnLeft: case Action::TurnRight: case Action::RollLeft:
     case Action::RollRight:
@@ -1103,8 +1220,8 @@ std::wstring SteeringLine() {
 
 // Draws the setup panel with Windows' own text drawing, then copies it into the window's pixels.
 void RenderBoard(Window& w, const XrSpaceLocation* head) {
-    const int W = 640, H = 812;
-    const float mmW = 220.0f, mmH = 279.0f;
+    const int W = 640, H = 844;
+    const float mmW = 220.0f, mmH = 290.0f;
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
     bi.bmiHeader.biWidth = W;
@@ -1205,6 +1322,7 @@ void RenderBoard(Window& w, const XrSpaceLocation* head) {
         {L"W", L"next rim"},              {L"X", L"centre steering"},
         {L"I", L"flip steering"},         {L"B", L"bring this panel"},
         {L"[  ]", L"scroll a panel"},     {L"A", L"move all windows here"},
+        {L"M", L"face me"},
     };
     const int colW = (W - 56) / 2;
     for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i) {
@@ -1213,7 +1331,7 @@ void RenderBoard(Window& w, const XrSpaceLocation* head) {
         put(keyf, text, x, yy + 1, x + 78, yy + 30, keys[i][0], one);
         put(body, text2, x + 84, yy, x + colW - 8, yy + 30, keys[i][1], one);
     }
-    y += 8 * 32 + 6;
+    y += 9 * 32 + 6;
     rule(y);
     y += 12;
     put(smallFont, text3, 28, y, W - 28, y + 24, L"Shift = fine steps   \x00B7   Esc = finish   \x00B7   Ctrl+Alt+K = hide", one);
@@ -1516,6 +1634,11 @@ void TeardownSession() {
     if (g.baseSpace) next.DestroySpace(g.baseSpace);
     if (g.viewSpace) next.DestroySpace(g.viewSpace);
     g.baseSpace = g.viewSpace = XR_NULL_HANDLE;
+    if (g.d3d12Fence && g.d3d12FenceValue && g.d3d12Fence->GetCompletedValue() < g.d3d12FenceValue && g.d3d12Event) {
+        g.d3d12Fence->SetEventOnCompletion(g.d3d12FenceValue, g.d3d12Event); // let the last copies finish first
+        WaitForSingleObject(g.d3d12Event, 1000);
+    }
+    ReleaseD3D12Slots();
     if (g.d3d12Upload) g.d3d12Upload->Release();
     if (g.d3d12List) g.d3d12List->Release();
     if (g.d3d12Alloc) g.d3d12Alloc->Release();

@@ -9,7 +9,7 @@
     ToggleAll: 3, Place: 5, Centre: 7, Invert: 8,
     Left: 9, Right: 10, Up: 11, Down: 12, Away: 13, Closer: 14,
     TiltUp: 15, TiltDown: 16, TurnLeft: 17, TurnRight: 18, RollLeft: 19, RollRight: 20,
-    Bigger: 21, Smaller: 22, Select: 23, ShiftAll: 30,
+    Bigger: 21, Smaller: 22, Select: 23, ShiftAll: 30, FaceMe: 31,
   };
 
   const S = { state: null, live: { running: false }, page: 'home', tab: 0, fine: false, key: '' };
@@ -222,6 +222,7 @@
             <div class="pm"><span>Tilt</span><button data-act="do" data-a="${A.TiltDown}" aria-label="Tilt towards you">−</button><button data-act="do" data-a="${A.TiltUp}" aria-label="Tilt away">+</button></div>
             <div class="pm"><span>Turn</span><button data-act="do" data-a="${A.TurnRight}" aria-label="Turn right">−</button><button data-act="do" data-a="${A.TurnLeft}" aria-label="Turn left">+</button></div>
             <div class="pm"><span>Roll</span><button data-act="do" data-a="${A.RollRight}" aria-label="Roll right">−</button><button data-act="do" data-a="${A.RollLeft}" aria-label="Roll left">+</button></div>
+            <button class="btn" data-act="do" data-a="${A.FaceMe}">Turn to face me</button>
             <p class="muted" style="margin:0;line-height:1.5">Works while a game is running in VR. Point your head at where the window should go, then press Place — Virtual Desktop's desktop view lets you click these without taking the headset off.</p>
           </section>
           <section class="card" aria-labelledby="shape-h"><h2 id="shape-h">${isWheel ? 'Shape' : 'Window'}</h2>${shape}</section>
@@ -426,7 +427,7 @@
           <div class="field"><label class="lbl" for="dist"><span>Place distance</span><span class="muted">About your eyes-to-wheel distance</span></label>
             <span style="display:flex;align-items:center;gap:6px"><input id="dist" class="num-in" type="number" min="20" max="150" data-set="distanceCm"><span class="muted">cm</span></span></div>
           <div class="field"><label for="nmm">Move step</label><span style="display:flex;align-items:center;gap:6px"><input id="nmm" class="num-in" type="number" min="1" max="50" data-set="nudgeMm"><span class="muted">mm</span></span></div>
-          <div class="field"><label for="ndeg">Turn step</label><span style="display:flex;align-items:center;gap:6px"><input id="ndeg" class="num-in" type="number" min="0.25" max="10" step="0.25" data-set="nudgeDeg"><span class="muted">°</span></span></div>
+          <div class="field"><label for="ndeg">Turn step</label><span style="display:flex;align-items:center;gap:6px"><input id="ndeg" class="num-in" type="number" min="0.25" max="45" step="0.25" data-set="nudgeDeg"><span class="muted">°</span></span></div>
         </section>
         <section class="card" aria-labelledby="tools-h">
           <h2 id="tools-h">Troubleshooting</h2>

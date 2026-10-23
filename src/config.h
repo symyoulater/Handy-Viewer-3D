@@ -63,7 +63,7 @@ struct Config {
     bool wheelViewKnown = false;
     std::array<float, 4> wheelView{0.0f, 0.0f, 0.0f, 0.0f};
     float nudgeMm = 5.0f;
-    float nudgeDeg = 1.0f;
+    float nudgeDeg = 5.0f; // turn / tilt / roll step (Shift = quarter of a degree)
     SteeringSettings steering;
     std::string activeWheel = "300gt";
     std::vector<WheelProfile> wheels;

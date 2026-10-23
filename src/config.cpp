@@ -92,7 +92,7 @@ bool SaveConfig(const Config& c) {
     j["wheel_placed"] = c.wheelPlaced;
     if (c.wheelViewKnown) j["wheel_view"] = {c.wheelView[0], c.wheelView[1], c.wheelView[2], c.wheelView[3]};
     j["nudge_mm"] = c.nudgeMm;
-    j["nudge_deg"] = c.nudgeDeg;
+    j["turn_step_deg"] = c.nudgeDeg;
     j["steering"] = {{"range_deg", c.steering.rangeDeg},
                      {"invert", c.steering.invert},
                      {"centre_offset_deg", c.steering.centreOffsetDeg},
@@ -186,7 +186,7 @@ bool LoadConfig(Config& c) {
             c.wheelViewKnown = true;
         }
         c.nudgeMm = j.value("nudge_mm", d.nudgeMm);
-        c.nudgeDeg = j.value("nudge_deg", d.nudgeDeg);
+        c.nudgeDeg = j.value("turn_step_deg", d.nudgeDeg); // (the old 1-degree "nudge_deg" was too small to notice)
         if (j.contains("steering")) {
             const auto& s = j["steering"];
             c.steering.rangeDeg = s.value("range_deg", d.steering.rangeDeg);

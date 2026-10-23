@@ -184,6 +184,8 @@ namespace ThinPlaceVR
         private readonly MemoryMappedViewAccessor _view;
         private readonly IntPtr _base;
         private uint _seq;
+        private ulong _lastHash;
+        private int _lastW, _lastH;
 
         public FrameWriter(string id)
         {
@@ -213,6 +215,11 @@ namespace ThinPlaceVR
             var data = src.LockBits(new Rectangle(0, 0, src.Width, src.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
             try
             {
+                // Nothing changed (a still Discord window, a paused page)? Then don't send it again:
+                // the game only has work to do when there's a new picture.
+                ulong hash = Fingerprint(data, src.Width, src.Height);
+                if (hash == _lastHash && src.Width == _lastW && src.Height == _lastH) return;
+                _lastHash = hash; _lastW = src.Width; _lastH = src.Height;
                 _seq |= 1;
                 _view.Write(4, _seq);                // writing
                 _view.Write(8, (uint)src.Width);
@@ -229,6 +236,22 @@ namespace ThinPlaceVR
                 src.UnlockBits(data);
                 if (owned) src.Dispose();
             }
+        }
+
+        // A quick fingerprint of the picture: every 5th pixel of every 2nd row, mixed FNV-style.
+        private static ulong Fingerprint(BitmapData d, int w, int h)
+        {
+            ulong x = 1469598103934665603UL;
+            for (int y = 0; y < h; y += 2)
+            {
+                IntPtr row = d.Scan0 + y * d.Stride;
+                for (int i = 0; i < w; i += 5)
+                {
+                    x ^= (uint)Marshal.ReadInt32(row, i * 4);
+                    x *= 1099511628211UL;
+                }
+            }
+            return x;
         }
 
         [DllImport("kernel32.dll", EntryPoint = "RtlMoveMemory")]

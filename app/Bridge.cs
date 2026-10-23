@@ -177,7 +177,7 @@ namespace ThinPlaceVR
                 ["margin"] = ConfigStore.Num(cfg, "wheel_margin_mm", 25),
                 ["distanceCm"] = Math.Round(ConfigStore.Num(cfg, "place_distance_m", 0.6) * 100),
                 ["nudgeMm"] = ConfigStore.Num(cfg, "nudge_mm", 5),
-                ["nudgeDeg"] = ConfigStore.Num(cfg, "nudge_deg", 1),
+                ["nudgeDeg"] = ConfigStore.Num(cfg, "turn_step_deg", 5),
                 ["range"] = ConfigStore.Num(steering, "range_deg", 900),
                 ["invert"] = ConfigStore.Bool(steering, "invert", false),
                 ["deviceMatch"] = ConfigStore.Str(steering, "device_match", "auto"),
@@ -476,7 +476,7 @@ namespace ThinPlaceVR
                             case "margin": cfg["wheel_margin_mm"] = Clamp(value, 0, 150); break;
                             case "distanceCm": cfg["place_distance_m"] = Clamp(value, 20, 150) / 100.0; break;
                             case "nudgeMm": cfg["nudge_mm"] = Clamp(value, 1, 50); break;
-                            case "nudgeDeg": cfg["nudge_deg"] = Clamp(value, 0.25, 10); break;
+                            case "nudgeDeg": cfg["turn_step_deg"] = Clamp(value, 0.25, 45); break;
                             case "range": steering["range_deg"] = Clamp(value, 90, 3600); break;
                             case "invert": steering["invert"] = Convert.ToBoolean(value); break;
                             case "deviceMatch": steering["device_match"] = Convert.ToString(value).Trim().Length == 0 ? "auto" : Convert.ToString(value).Trim(); break;
